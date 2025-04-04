@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>BabylonJS Minecraft Clone</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .hotbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-radius: 10px;
+            pointer-events: all;
+        }
+        .hotbar-slot {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        .hotbar-slot.active {
+            border-color: white;
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        .hotbar-slot img {
+            width: 40px;
+            height: 40px;
+            image-rendering: pixelated;
+        }
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background-color: white;
+        }
+        .crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        .crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .progress-bar {
+            width: 300px;
+            height: 20px;
+            background-color: #333;
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    
+    <div id="ui-container">
+        <div class="crosshair"></div>
+        <div class="hotbar">
+            <div class="hotbar-slot active" data-block="grass">
+                <div style="width: 40px; height: 40px; background: #67a367;"></div>
+            </div>
+            <div class="hotbar-slot" data-block="dirt">
+                <div style="width: 40px; height: 40px; background: #996633;"></div>
+            </div>
+            <div class="hotbar-slot" data-block="stone">
+                <div style="width: 40px; height: 40px; background: #b3b3b3;"></div>
+            </div>
+            <div class="hotbar-slot" data-block="wood">
+                <div style="width: 40px; height: 40px; background: #80471c;"></div>
+            </div>
+            <div class="hotbar-slot" data-block="leaves">
+                <div style="width: 40px; height: 40px; background: #336633;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading-screen">
+        <h1 class="text-4xl mb-4">Loading Minecraft Clone</h1>
+        <div class="progress-bar">
+            <div class="progress" id="progress-bar"></div>
+        </div>
+        <p class="mt-4" id="loading-text">Initializing engine...</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const updateLoadingScreen = (text, progress) => {
+                document.getElementById('loading-text').textContent = text;
+                document.getElementById('progress-bar').style.width = `${progress}%`;
+            };
+            
+            const canvas = document.getElementById("renderCanvas");
+            updateLoadingScreen("Initializing engine...", 10);
+            const engine = new BABYLON.Engine(canvas, true);
+            
+            updateLoadingScreen("Creating scene...", 20);
+            const scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.98, 1);
+            
+            updateLoadingScreen("Setting up camera...", 30);
+            const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(16, 20, 16), scene);
+            camera.attachControl(canvas, true);
+            camera.applyGravity = true;
+            camera.ellipsoid = new BABYLON.Vector3(0.5, 1.8, 0.5);
+            camera.checkCollisions = true;
+            camera.minZ = 0.1;
+            camera.speed = 0.5;
+            camera.angularSensibility = 2000;
+            camera.inertia = 0.5;
+            
+            // Lägg till zoom-funktionalitet med tangentbord
+            const MIN_FOV = 0.5;
+            const MAX_FOV = 1.5;
+            let currentFOV = 1.0;
+            
+            window.addEventListener('keydown', (e) => {
+                // Zooma in med + tangenten
+                if (e.key === '+' || e.key === '=') {
+                    currentFOV = Math.max(MIN_FOV, currentFOV - 0.1);
+                    camera.fov = currentFOV;
+                }
+                // Zooma ut med - tangenten
+                if (e.key === '-' || e.key === '_') {
+                    currentFOV = Math.min(MAX_FOV, currentFOV + 0.1);
+                    camera.fov = currentFOV;
+                }
+            });
+            
+            camera.keysUp = [87, 38];    // W och pil upp
+            camera.keysDown = [83, 40];  // S och pil ner
+            camera.keysLeft = [65, 37];  // A och pil vänster
+            camera.keysRight = [68, 39]; // D och pil höger
+            
+            scene.collisionsEnabled = true;
+            scene.gravity = new BABYLON.Vector3(0, -0.5, 0);
+            
+            // Förbättrad hoppmekanik
+            let isJumping = false;
+            let canJump = true;
+            const JUMP_SPEED = 0.4;
+            const INITIAL_POSITION_Y = 2;
+            
+            // Sätt kamerans starthöjd
+            camera.position.y = INITIAL_POSITION_Y;
+            
+            // Hantera hopp och gravitation
+            scene.registerBeforeRender(() => {
+                // Kontrollera om kameran är på marken
+                if (camera.position.y <= INITIAL_POSITION_Y) {
+                    camera.position.y = INITIAL_POSITION_Y;
+                    isJumping = false;
+                    canJump = true;
+                }
+            });
+            
+            // Hantera knapptryckningar
+            window.addEventListener('keydown', (e) => {
+                // Hoppa med mellanslag
+                if (e.code === 'Space' && canJump && !isJumping) {
+                    isJumping = true;
+                    canJump = false;
+                    camera.cameraDirection.y = JUMP_SPEED;
+                    setTimeout(() => {
+                        camera.cameraDirection.y = 0;
+                    }, 100);
+                }
+                
+                // Krypa med shift
+                if (e.key === 'Shift') {
+                    camera.speed = 0.25;
+                    camera.position.y = 1;
+                }
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'Shift') {
+                    camera.speed = 0.5;
+                    if (!isJumping) {
+                        camera.position.y = INITIAL_POSITION_Y;
+                    }
+                }
+            });
+            
+            scene.onBeforeRenderObservable.clear();
+            scene.actionManager = new BABYLON.ActionManager(scene);
+            
+            // Initiera inputStates objektet
+            scene.inputStates = {};
+            
+            scene.actionManager.registerAction(
+                new BABYLON.ExecuteCodeAction(
+                    BABYLON.ActionManager.OnKeyDownTrigger,
+                    function (evt) {
+                        scene.inputStates[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+                    }
+                )
+            );
+            
+            scene.actionManager.registerAction(
+                new BABYLON.ExecuteCodeAction(
+                    BABYLON.ActionManager.OnKeyUpTrigger,
+                    function (evt) {
+                        scene.inputStates[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+                    }
+                )
+            );
+            
+            updateLoadingScreen("Loading textures...", 40);
+            const createTexture = (color) => {
+                const texture = new BABYLON.Texture("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", scene);
+                texture.hasAlpha = true;
+                return texture;
+            };
+
+            const blockMaterials = {};
+            
+            // Pre-create materials for each block type
+            const createMaterial = (type) => {
+                if (blockMaterials[type]) return blockMaterials[type];
+                
+                const colors = {
+                    grass: {
+                        top: [0.4, 0.9, 0.4],    // Ljusgrön för gräs topp
+                        side: [0.4, 0.7, 0.4],   // Mörkare grön för sidor
+                        bottom: [0.6, 0.4, 0.2]  // Brun för botten (jord)
+                    },
+                    dirt: { 
+                        all: [0.6, 0.4, 0.2]     // Brun för jord
+                    },
+                    stone: { 
+                        all: [0.7, 0.7, 0.7]     // Grå för sten
+                    },
+                    wood: {
+                        top: [0.6, 0.4, 0.2],    // Brun för trä topp
+                        side: [0.5, 0.3, 0.1]    // Mörkare brun för trä sidor
+                    },
+                    leaves: { 
+                        all: [0.2, 0.6, 0.2]     // Mörkgrön för löv
+                    }
+                };
+                
+                if (colors[type].all) {
+                    const material = new BABYLON.StandardMaterial(type, scene);
+                    material.diffuseColor = new BABYLON.Color3(...colors[type].all);
+                    blockMaterials[type] = material;
+                    return material;
+                } else {
+                    const multiMat = new BABYLON.MultiMaterial(type, scene);
+                    const topMat = new BABYLON.StandardMaterial(`${type}_top`, scene);
+                    const sideMat = new BABYLON.StandardMaterial(`${type}_side`, scene);
+                    const bottomMat = new BABYLON.StandardMaterial(`${type}_bottom`, scene);
+                    
+                    topMat.diffuseColor = new BABYLON.Color3(...colors[type].top);
+                    sideMat.diffuseColor = new BABYLON.Color3(...colors[type].side);
+                    bottomMat.diffuseColor = new BABYLON.Color3(...(colors[type].bottom || colors[type].side));
+                    
+                    multiMat.subMaterials = [
+                        sideMat, sideMat, topMat, bottomMat, sideMat, sideMat
+                    ];
+                    
+                    blockMaterials[type] = multiMat;
+                    return multiMat;
+                }
+            };
+            
+            // Pre-create all materials
+            Object.keys({grass: 1, dirt: 1, stone: 1, wood: 1, leaves: 1}).forEach(createMaterial);
+            
+            const createBlock = (x, y, z, type) => {
+                const block = BABYLON.MeshBuilder.CreateBox(`block_${x}_${y}_${z}`, {
+                    size: 1,
+                    width: 1,
+                    height: 1,
+                    depth: 1
+                }, scene);
+                
+                block.position = new BABYLON.Vector3(x, y, z);
+                block.checkCollisions = true;
+                block.material = blockMaterials[type];
+                return block;
+            };
+            
+            updateLoadingScreen("Generating terrain...", 50);
+            const groundSize = 32; // Reduced from 100 to 32
+            const SPAWN_HEIGHT = 10; // Konstant höjd för spawn-plattformen
+            const world = {};
+            
+            for (let x = 0; x < groundSize; x++) {
+                for (let z = 0; z < groundSize; z++) {
+                    const height = Math.floor(5 + Math.sin(x/10) * 3 + Math.cos(z/10) * 3);
+                    
+                    for (let y = 0; y < height; y++) {
+                        const blockType = y === height - 1 ? 'grass' : (y > height - 4 ? 'dirt' : 'stone');
+                        const block = createBlock(x, y, z, blockType);
+                        
+                        if (!world[x]) world[x] = {};
+                        if (!world[x][y]) world[x][y] = {};
+                        world[x][y][z] = { mesh: block, type: blockType };
+                    }
+                    
+                    if (Math.random() < 0.01 && height > 5) { // Reduced tree frequency
+                        const treeHeight = 4;
+                        for (let y = height; y < height + treeHeight; y++) {
+                            const block = createBlock(x, y, z, 'wood');
+                            if (!world[x]) world[x] = {};
+                            if (!world[x][y]) world[x][y] = {};
+                            world[x][y][z] = { mesh: block, type: 'wood' };
+                        }
+                        
+                        const leafRadius = 2;
+                        for (let lx = x - leafRadius; lx <= x + leafRadius; lx++) {
+                            for (let ly = height + treeHeight - 1; ly <= height + treeHeight + 1; ly++) {
+                                for (let lz = z - leafRadius; lz <= z + leafRadius; lz++) {
+                                    if (Math.random() < 0.7 && lx >= 0 && lx < groundSize && lz >= 0 && lz < groundSize) {
+                                        if (!world[lx]) world[lx] = {};
+                                        if (!world[lx][ly]) world[lx][ly] = {};
+                                        if (!world[lx][ly][lz]) {
+                                            const block = createBlock(lx, ly, lz, 'leaves');
+                                            world[lx][ly][lz] = { mesh: block, type: 'leaves' };
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Efter att världen har genererats, skapa en säker spawn-plats
+            const spawnX = Math.floor(groundSize / 2);
+            const spawnZ = Math.floor(groundSize / 2);
+            
+            // Rensa några block runt spawn för att säkerställa att spelaren inte fastnar
+            for (let x = spawnX - 2; x <= spawnX + 2; x++) {
+                for (let z = spawnZ - 2; z <= spawnZ + 2; z++) {
+                    for (let y = 0; y < SPAWN_HEIGHT + 5; y++) {
+                        if (world[x]?.[y]?.[z]) {
+                            world[x][y][z].mesh.dispose();
+                            delete world[x][y][z];
+                        }
+                    }
+                }
+            }
+            
+            // Skapa en plattform att starta på
+            for (let x = spawnX - 2; x <= spawnX + 2; x++) {
+                for (let z = spawnZ - 2; z <= spawnZ + 2; z++) {
+                    const block = createBlock(x, SPAWN_HEIGHT, z, 'stone');
+                    if (!world[x]) world[x] = {};
+                    if (!world[x][SPAWN_HEIGHT]) world[x][SPAWN_HEIGHT] = {};
+                    world[x][SPAWN_HEIGHT][z] = { mesh: block, type: 'stone' };
+                }
+            }
+            
+            // Sätt kameran till spawn-positionen
+            camera.position = new BABYLON.Vector3(spawnX, SPAWN_HEIGHT + 2, spawnZ);
+            
+            updateLoadingScreen("Setting up physics...", 70);
+            scene.gravity = new BABYLON.Vector3(0, -0.2, 0);
+            
+            updateLoadingScreen("Setting up lighting...", 80);
+            const light = new BABYLON.DirectionalLight("light", new BABYLON.Vector3(-1, -2, -1), scene);
+            light.intensity = 0.8;
+            light.diffuse = new BABYLON.Color3(1, 1, 1);
+            light.specular = new BABYLON.Color3(0.2, 0.2, 0.2);
+            
+            const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
+            ambientLight.intensity = 0.3;
+            
+            updateLoadingScreen("Setting up controls...", 90);
+            let currentBlockType = 'grass';
+            
+            document.querySelectorAll('.hotbar-slot').forEach(slot => {
+                slot.addEventListener('click', () => {
+                    document.querySelectorAll('.hotbar-slot').forEach(s => s.classList.remove('active'));
+                    slot.classList.add('active');
+                    currentBlockType = slot.dataset.block;
+                });
+            });
+            
+            canvas.addEventListener('click', (e) => {
+                if (e.metaKey || e.button === 2) { // CMD+klick (Mac) eller högerklick
+                    const pickResult = scene.pick(scene.pointerX, scene.pointerY, mesh => mesh.name.startsWith('block_'));
+                    if (pickResult.hit && pickResult.pickedMesh) {
+                        const pos = pickResult.pickedMesh.position;
+                        const normal = pickResult.getNormal(true);
+                        
+                        const x = Math.round(pos.x + normal.x);
+                        const y = Math.round(pos.y + normal.y);
+                        const z = Math.round(pos.z + normal.z);
+                        
+                        if (!world[x]?.[y]?.[z]) {
+                            const block = createBlock(x, y, z, currentBlockType);
+                            if (!world[x]) world[x] = {};
+                            if (!world[x][y]) world[x][y] = {};
+                            world[x][y][z] = { mesh: block, type: currentBlockType };
+                        }
+                    }
+                } else {
+                    const pickResult = scene.pick(scene.pointerX, scene.pointerY, mesh => mesh.name.startsWith('block_'));
+                    if (pickResult.hit && pickResult.pickedMesh) {
+                        const pos = pickResult.pickedMesh.position;
+                        const x = Math.round(pos.x);
+                        const y = Math.round(pos.y);
+                        const z = Math.round(pos.z);
+                        
+                        if (world[x]?.[y]?.[z]) {
+                            world[x][y][z].mesh.dispose();
+                            delete world[x][y][z];
+                        }
+                    }
+                }
+            });
+            
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+            
+            updateLoadingScreen("Ready!", 100);
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+            }, 500);
+            
+            engine.runRenderLoop(() => scene.render());
+            window.addEventListener('resize', () => engine.resize());
+
+            // Lägg till instruktioner i UI:n
+            const instructions = document.createElement('div');
+            instructions.style.position = 'absolute';
+            instructions.style.top = '10px';
+            instructions.style.left = '10px';
+            instructions.style.color = 'white';
+            instructions.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            instructions.style.padding = '10px';
+            instructions.style.borderRadius = '5px';
+            instructions.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            instructions.innerHTML = `
+                Kontroller:<br>
+                - WASD eller piltangenter = Rörelse<br>
+                - Mellanslag = Hoppa<br>
+                - Shift = Krypa<br>
+                - Klick = Ta bort block<br>
+                - CMD + Klick = Placera block<br>
+                - + och - = Zooma in/ut<br>
+                - Välj block i hotbaren nedan
+            `;
+            document.getElementById('ui-container').appendChild(instructions);
+        });
+    </script>
+</body>
+</html>
