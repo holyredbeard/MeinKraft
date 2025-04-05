@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>MeinKraft - Space Edition</title>
+    <title>Cubelure - Space Edition</title>
     <style>
         body, html {
             margin: 0;
@@ -25,20 +25,24 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            z-index: 2000;
+        }
+        #logo {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 300px;
         }
         #loadingBar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             width: 300px;
-            height: 30px;
-            background-color: #333;
-            border-radius: 15px;
+            height: 20px;
+            background-color: rgba(51, 51, 51, 0.8);
+            border-radius: 10px;
             overflow: hidden;
-            margin-top: 20px;
         }
         #loadingProgress {
             width: 0%;
@@ -47,8 +51,13 @@
             transition: width 0.3s;
         }
         #loadingText {
-            margin-top: 10px;
+            position: absolute;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-family: monospace;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
         }
         #debug {
             position: fixed;
@@ -60,6 +69,10 @@
             border-radius: 5px;
             font-family: monospace;
             z-index: 1000;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            word-wrap: break-word;
         }
         #instructions {
             position: fixed;
@@ -94,6 +107,9 @@
             justify-content: center;
             cursor: pointer;
             transition: border-color 0.3s;
+            background-size: cover;
+            background-position: center;
+            image-rendering: pixelated;
         }
         .hotbar-item.selected {
             border-color: white;
@@ -107,30 +123,105 @@
             font-size: 24px;
             pointer-events: none;
             z-index: 1000;
+            display: none;
+        }
+        #diamondCounter {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        
+        #diamondIcon {
+            width: 32px;
+            height: 32px;
+            image-rendering: pixelated;
+        }
+        
+        #diamondCount {
+            color: white;
+            font-size: 24px;
+            font-family: 'Minecraft', monospace;
+        }
+        
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        #startScreen img.logo {
+            max-width: 300px;
+            margin-top: 20vh;
+            margin-bottom: 0;
+        }
+        
+        #startButton {
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s;
+            padding: 0;
+            margin-top: -80px;
+        }
+        
+        #startButton img {
+            max-width: 150px;
+            image-rendering: pixelated;
+        }
+        
+        #startButton:hover {
+            transform: scale(1.1);
         }
     </style>
 </head>
 <body>
+    <div id="startScreen">
+        <img class="logo" src="src/images/logo.png" alt="Cubelure Logo">
+        <button id="startButton">
+            <img src="src/images/start.png" alt="Start Game">
+        </button>
+    </div>
+    
     <div id="loadingScreen">
-        <h2>Laddar Mars...</h2>
+        <img id="logo" src="src/images/logo.png" alt="Game Logo">
         <div id="loadingBar">
             <div id="loadingProgress"></div>
         </div>
-        <div id="loadingText">Förbereder terräng...</div>
+        <div id="loadingText">Preparing world...</div>
     </div>
     <canvas id="renderCanvas" touch-action="none"></canvas>
     <div id="debug">Loading...</div>
     <div id="instructions">
-        WASD/Pilar = Rörelse<br>
-        Mellanslag = Hoppa<br>
-        Vänsterklick = Ta bort block<br>
-        Högerklick = Placera block<br>
-        1-6 = Välj block<br>
-        ESC = Frigör muspekare
+        WASD/Arrows = Move<br>
+        Space = Jump<br>
+        Left Click = Remove block<br>
+        Right Click = Place block<br>
+        1-6 = Select block<br>
+        ESC = Release mouse
     </div>
     <div id="crosshair">+</div>
     <div id="hotbar"></div>
-    
+    <div id="diamondCounter">
+        <img id="diamondIcon" src="src/textures/diamond.png" alt="Diamond">
+        <span id="diamondCount">0</span>
+    </div>
+
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script>
         // Konstanter för världen
@@ -142,7 +233,7 @@
         const SPAWN_Z = 0;
         const baseHeight = 5;
         
-        // Block typer för trollskogen
+        // Block typer för världen
         const blockTypes = {
             GRASS: 'grass',
             DIRT: 'dirt',
@@ -151,28 +242,53 @@
             TREE_LEAVES: 'tree_leaves',
             FLOWER_RED: 'flower_red',
             FLOWER_YELLOW: 'flower_yellow',
+            FLOWER_PURPLE: 'flower_purple',
             MUSHROOM: 'mushroom',
-            TROLL_STONE: 'troll_stone',  // För förtrollade troll!
-            MOSS: 'moss'                  // För extra atmosfär
+            STONE_SPECIAL: 'stone_special',  // Changed from TROLL_STONE
+            MOSS: 'moss',
+            CLOUD: 'cloud',
+            SUN: 'sun',
+            DIAMOND: 'diamond'  // Ny blocktyp
         };
         
         // Blockfärger för sommarskog
         const blockColors = {
-            [blockTypes.GRASS]: new BABYLON.Color3(0.35, 0.6, 0.25),     // Mörkare, mer naturligt gräs
-            [blockTypes.DIRT]: new BABYLON.Color3(0.35, 0.25, 0.15),     // Mörkare jord
-            [blockTypes.STONE]: new BABYLON.Color3(0.6, 0.6, 0.6),       // Grå sten
-            [blockTypes.TREE_TRUNK]: new BABYLON.Color3(0.6, 0.4, 0.2),  // Träfärg
-            [blockTypes.TREE_LEAVES]: new BABYLON.Color3(0.3, 0.5, 0.2), // Löv
-            [blockTypes.FLOWER_RED]: new BABYLON.Color3(0.8, 0.2, 0.2),  // Röda blommor
-            [blockTypes.FLOWER_YELLOW]: new BABYLON.Color3(0.9, 0.8, 0.2), // Gula blommor
-            [blockTypes.MUSHROOM]: new BABYLON.Color3(0.8, 0.4, 0.4),    // Rosa svamp
-            [blockTypes.TROLL_STONE]: new BABYLON.Color3(0.5, 0.5, 0.55), // Trollsten
-            [blockTypes.MOSS]: new BABYLON.Color3(0.3, 0.45, 0.2)        // Mörkare mossa
+            [blockTypes.GRASS]: new BABYLON.Color3(0.35, 0.6, 0.25),
+            [blockTypes.DIRT]: new BABYLON.Color3(0.35, 0.25, 0.15),
+            [blockTypes.STONE]: new BABYLON.Color3(0.6, 0.6, 0.6),
+            [blockTypes.TREE_TRUNK]: new BABYLON.Color3(0.6, 0.4, 0.2),
+            [blockTypes.TREE_LEAVES]: new BABYLON.Color3(0.15, 0.3, 0.1), // Mörkare grön för löv
+            [blockTypes.FLOWER_RED]: new BABYLON.Color3(0.8, 0.2, 0.2),
+            [blockTypes.FLOWER_YELLOW]: new BABYLON.Color3(0.9, 0.8, 0.2),
+            [blockTypes.FLOWER_PURPLE]: new BABYLON.Color3(0.5, 0.2, 0.5),
+            [blockTypes.MUSHROOM]: new BABYLON.Color3(0.8, 0.4, 0.4),
+            [blockTypes.STONE_SPECIAL]: new BABYLON.Color3(0.5, 0.5, 0.55),
+            [blockTypes.MOSS]: new BABYLON.Color3(0.3, 0.45, 0.2),
+            [blockTypes.CLOUD]: new BABYLON.Color3(1, 1, 1),
+            [blockTypes.SUN]: new BABYLON.Color3(0.9, 0.7, 0.1),
+            [blockTypes.DIAMOND]: new BABYLON.Color3(0.2, 0.8, 0.8)
         };
         
         let blockCount = 0;
         const blockMeshes = {};
         const blockMaterials = {};
+        
+        // Lägg till variabel för att hålla koll på antal diamanter
+        let collectedDiamonds = 0;
+        
+        // Globala variabler i början av script-taggen
+        let playerPosition = new BABYLON.Vector3(SPAWN_X, SPAWN_HEIGHT, SPAWN_Z);
+        
+        // Uppdatera ljudhanteringen i början av script-taggen
+        const diamondSound = new Audio('src/sound/diamond.mp3');
+        const introSound = new Audio('src/sound/intro.mp3');
+        const startSound = new Audio('src/sound/start.mp3');
+        const digSound = new Audio('src/sound/dig.mp3');
+        const buildSound = new Audio('src/sound/build.mp3');
+
+        // Säkerställ att ljuden är laddade
+        introSound.load();
+        startSound.load();
         
         function debugLog(message) {
             const timestamp = new Date().toLocaleTimeString();
@@ -243,10 +359,27 @@
             }
         }
 
-        // Starta spelet när sidan laddas
-        window.addEventListener('load', async function() {
+        // Lägg till startknapphantering
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startButton').addEventListener('click', function() {
+                // Dölj startskärmen
+                document.getElementById('startScreen').style.display = 'none';
+                // Visa laddningsskärmen
+                document.getElementById('loadingScreen').style.display = 'block';
+                // Spela intro-ljudet
+                introSound.play().catch(error => {
+                    console.error("Kunde inte spela intro-ljudet:", error);
+                    debugLog("Ljudfel: " + error.message);
+                });
+                // Starta spelet
+                startGame();
+            });
+        });
+        
+        // Flytta all existerande spelinitiering till en ny funktion
+        async function startGame() {
             try {
-                debugLog('=== STARTAR TROLLSKOGEN ===');
+                debugLog('=== STARTING WORLD GENERATION ===');
                 
                 const canvas = document.getElementById('renderCanvas');
                 const engine = new BABYLON.Engine(canvas, true);
@@ -256,7 +389,13 @@
                 let isLocked = false;
                 
                 // Ljusblå sommarhimmel
-                scene.clearColor = new BABYLON.Color4(0.6, 0.8, 1.0, 1);
+                scene.clearColor = new BABYLON.Color4(0.6, 0.8, 1.0, 1.0);
+                scene.ambientColor = new BABYLON.Color3(1, 1, 1);
+                scene.useRightHandedSystem = true;
+                scene.constantlyUpdateMeshUnderPointer = true;
+                
+                // Uppdatera alpha mode för bättre rendering
+                scene.alphaMode = BABYLON.Engine.ALPHA_PREMULTIPLIED;
                 
                 // Aktivera fysik och kollisioner
                 scene.collisionsEnabled = true;
@@ -271,10 +410,10 @@
                 light.intensity = 1.2;
                 light.groundColor = new BABYLON.Color3(0.5, 0.5, 0.5);
                 
-                // Lägg till lite dimma för mystisk känsla
+                // Uppdatera dimman för bättre synlighet och himmelsfärg
                 scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
                 scene.fogDensity = 0.01;
-                scene.fogColor = new BABYLON.Color3(0.8, 0.9, 1.0);
+                scene.fogColor = new BABYLON.Color3(0.6, 0.8, 1.0);
                 
                 debugLog('Miljö skapad');
                 
@@ -286,14 +425,19 @@
                 camera.fov = 1.2;
                 camera.checkCollisions = true;
                 camera.applyGravity = true;
-                camera.ellipsoid = new BABYLON.Vector3(0.4, 1.8, 0.4);  // Normal spelarhöjd (1.8 block)
-                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0); // Centrera kollisionsboxen
+                camera.ellipsoid = new BABYLON.Vector3(0.4, 1.8, 0.4);
+                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0);
                 camera.minZ = 0.05;
                 camera.maxZ = 1000;
                 camera.inertia = 0.5;
                 camera.angularSensibility = 1000;
-                camera.stepHeight = 1.1;  // Gör det möjligt att gå över 1-block höga hinder
+                camera.stepHeight = 1.1;
 
+                // Uppdatera kamerans position och spelarposition
+                scene.registerBeforeRender(() => {
+                    playerPosition.copyFrom(camera.position);
+                });
+                
                 // Sätt upp kontroller för WASD och piltangenter
                 const keysForward = [87, 38];  // W och pil upp
                 const keysBackward = [83, 40]; // S och pil ner
@@ -308,7 +452,7 @@
                 // Sätt gravitationen för scenen
                 scene.gravity = new BABYLON.Vector3(0, -0.65, 0);
                 scene.collisionsEnabled = true;
-
+                
                 // Hantera hopp
                 let canJump = true;
                 let jumpVelocity = 0;
@@ -356,23 +500,41 @@
                     blockTypes.DIRT,
                     blockTypes.GRASS,
                     blockTypes.STONE,
-                    blockTypes.TREE_TRUNK,
-                    blockTypes.MOSS,
-                    blockTypes.TROLL_STONE
+                    blockTypes.TREE_TRUNK
                 ];
                 
                 hotbarBlocks.forEach((type, index) => {
                     const item = document.createElement('div');
                     item.className = 'hotbar-item';
-                    item.style.backgroundColor = `rgb(${blockColors[type].r * 255}, ${blockColors[type].g * 255}, ${blockColors[type].b * 255})`;
+                    
+                    // Sätt textur baserat på blocktyp
+                    switch(type) {
+                        case blockTypes.DIRT:
+                            item.style.backgroundImage = 'url("src/textures/dirt.png")';
+                            break;
+                        case blockTypes.GRASS:
+                            item.style.backgroundImage = 'url("src/textures/grass.png")';
+                            break;
+                        case blockTypes.STONE:
+                            item.style.backgroundImage = 'url("src/textures/stone.png")';
+                            break;
+                        case blockTypes.TREE_TRUNK:
+                            item.style.backgroundImage = 'url("src/textures/tree2.png")';
+                            break;
+                        default:
+                            item.style.backgroundColor = `rgb(${blockColors[type].r * 255}, ${blockColors[type].g * 255}, ${blockColors[type].b * 255})`;
+                    }
+                    
                     if (type === selectedBlockType) {
                         item.classList.add('selected');
                     }
+                    
                     item.addEventListener('click', () => {
                         document.querySelectorAll('.hotbar-item').forEach(i => i.classList.remove('selected'));
                         item.classList.add('selected');
                         selectedBlockType = type;
                     });
+                    
                     hotbar.appendChild(item);
                     
                     // Lägg till nummer-tangent som genväg (1-6)
@@ -406,14 +568,35 @@
                     );
                     
                     if (evt.button === 0) { // Vänsterklick
-                        if (!isCmdPressed) {  // Ta bara bort block om CMD inte är intryckt
+                        if (!isCmdPressed) {  // Normal blockhantering
                             if (pickResult.hit && pickResult.pickedMesh && pickResult.pickedMesh.blockType) {
                                 const position = pickResult.pickedMesh.position;
                                 const key = `${Math.floor(position.x)},${Math.floor(position.y)},${Math.floor(position.z)}`;
-                                if (blockMeshes[key]) {
+                                
+                                // Om det är en diamant, samla in den och spela diamantljudet
+                                if (blockMeshes[key] && blockMeshes[key].blockType === blockTypes.DIAMOND) {
+                                    blockMeshes[key].dispose();
+                                    delete blockMeshes[key];
+                                    collectedDiamonds++;
+                                    document.getElementById('diamondCount').textContent = collectedDiamonds;
+                                    debugLog(`Diamant samlad! Totalt: ${collectedDiamonds}`);
+                                    
+                                    // Spela upp diamantljudet
+                                    diamondSound.currentTime = 0;
+                                    diamondSound.play().catch(error => {
+                                        console.log("Kunde inte spela ljudet:", error);
+                                    });
+                                } else {
+                                    // Vanlig blockborttagning för andra block
                                     blockMeshes[key].dispose();
                                     delete blockMeshes[key];
                                     debugLog(`Block borttaget på ${key}`);
+                                    
+                                    // Spela upp grävljudet
+                                    digSound.currentTime = 0;
+                                    digSound.play().catch(error => {
+                                        console.log("Kunde inte spela ljudet:", error);
+                                    });
                                 }
                             }
                         } else if (pickResult.hit) {  // Placera block om CMD är intryckt
@@ -452,6 +635,12 @@
                                     !(newX === playerHeadPos.x && newY === playerHeadPos.y && newZ === playerHeadPos.z)) {
                                     createBlock(newX, newY, newZ, selectedBlockType);
                                     debugLog(`Block placerat på ${newX},${newY},${newZ}`);
+                                    
+                                    // Spela upp byggljudet
+                                    buildSound.currentTime = 0;
+                                    buildSound.play().catch(error => {
+                                        console.log("Kunde inte spela ljudet:", error);
+                                    });
                                 }
                             }
                         }
@@ -476,11 +665,12 @@
                     if (isLocked) {
                         debugLog("Muspekare låst");
                         camera.attachControl(canvas, true);
+                        document.getElementById('crosshair').style.display = 'block';
                     } else {
                         debugLog("Muspekare frigjord");
-                        // Återställ alla rörelseflaggor när pointer lock släpps
                         moveForward = moveBackward = moveLeft = moveRight = false;
                         camera.detachControl(canvas);
+                        document.getElementById('crosshair').style.display = 'none';
                     }
                 }
                 
@@ -513,59 +703,178 @@
                     
                     // Skapa eller återanvänd material
                     let materialKey = `material_${type}`;
+                    
+                    let material;
+                    
                     if (!blockMaterials[materialKey]) {
-                        const material = new BABYLON.StandardMaterial(materialKey, scene);
+                        material = new BABYLON.StandardMaterial(materialKey, scene);
                         material.diffuseColor = blockColors[type];
                         material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                        material.useDepthPassForTransparentRendering = true;
+
+                        // Specialhantering för solen
+                        if (type === blockTypes.SUN) {
+                            const sunTexture = new BABYLON.Texture("src/textures/sun.png", scene);
+                            material.diffuseTexture = sunTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.emissiveColor = new BABYLON.Color3(0.4, 0.3, 0);
+                            material.ambientColor = new BABYLON.Color3(0.9, 0.7, 0.1);
+                            material.specularColor = new BABYLON.Color3(0.3, 0.3, 0);
+                            sunTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
+                        }
+
+                        // Specialhantering för blommor
+                        if (type === blockTypes.FLOWER_RED || type === blockTypes.FLOWER_YELLOW || type === blockTypes.FLOWER_PURPLE) {
+                            const flowerTexture = new BABYLON.Texture(
+                                type === blockTypes.FLOWER_PURPLE ? "src/textures/flower2.png" : "src/textures/flower.png",
+                                scene
+                            );
+                            material.diffuseTexture = flowerTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+                            material.backFaceCulling = true;
+                            material.specularColor = new BABYLON.Color3(0, 0, 0);
+                            material.ambientColor = blockColors[type];
+                            material.alpha = 1.0;
+                            flowerTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
+                        }
+
+                        // Lägg till gräs-textur
+                        if (type === blockTypes.GRASS) {
+                            const grassTexture = new BABYLON.Texture("src/textures/grass.png", scene);
+                            material.diffuseTexture = grassTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                            material.ambientColor = new BABYLON.Color3(0.35, 0.6, 0.25);
+                            material.emissiveColor = new BABYLON.Color3(0.05, 0.1, 0.02);
+                        }
+
+                        // Lägg till sten-textur
+                        if (type === blockTypes.STONE || type === blockTypes.STONE_SPECIAL) {
+                            const stoneTexture = new BABYLON.Texture("src/textures/stone.png", scene);
+                            material.diffuseTexture = stoneTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                            material.ambientColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+                            stoneTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
+                        }
                         
                         // Lägg till textur för trädens löv
                         if (type === blockTypes.TREE_LEAVES) {
                             const leavesTexture = new BABYLON.Texture("src/textures/tree.png", scene);
                             material.diffuseTexture = leavesTexture;
-                            material.diffuseTexture.hasAlpha = false;
-                            material.backFaceCulling = false;
-                            material.specularColor = new BABYLON.Color3(0, 0, 0);  // Ingen glans
-                            material.ambientColor = new BABYLON.Color3(0.4, 0.6, 0.3);  // Ljusare grundfärg
-                            material.emissiveColor = new BABYLON.Color3(0.1, 0.15, 0.05);  // Svag självlysande effekt för kontrast
-                            material.useLogarithmicDepth = true;  // Bättre djuprendering
+                            material.diffuseTexture.hasAlpha = false;  // Ingen alpha
+                            material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;  // Helt ogenomskinligt
+                            material.backFaceCulling = true;
+                            material.specularColor = new BABYLON.Color3(0, 0, 0);
+                            material.ambientColor = new BABYLON.Color3(0.4, 0.6, 0.3);
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.15, 0.05);
+                            material.alpha = 1.0;
+                            leavesTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
                         }
                         
-                        // Lägg till barktextur för trädstammar
+                        // Uppdatera barktextur för trädstammar
                         if (type === blockTypes.TREE_TRUNK) {
-                            const barkTexture = new BABYLON.Texture("src/textures/tree2.png", scene);
+                            const isAlternativeTexture = materialKey.endsWith('_v2');
+                            const barkTexture = new BABYLON.Texture(
+                                isAlternativeTexture ? "src/textures/tree3.png" : "src/textures/tree2.png",
+                                scene
+                            );
                             material.diffuseTexture = barkTexture;
                             material.diffuseTexture.hasAlpha = false;
                             material.backFaceCulling = false;
-                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);  // Mindre glans
-                            material.ambientColor = new BABYLON.Color3(0.6, 0.4, 0.2);   // Ljusare grundfärg
-                            material.emissiveColor = new BABYLON.Color3(0.1, 0.05, 0);   // Svag varm glöd
+                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                            material.ambientColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.05, 0);
+                        }
+                        
+                        // Hantera genomskinliga block
+                        if (type === blockTypes.CLOUD) {
+                            material = new BABYLON.StandardMaterial(`cloudMaterial_${key}`, scene);
+                            material.diffuseColor = new BABYLON.Color3(1, 1, 1);
+                            material.alpha = 0.3;
+                            material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0, 0, 0);
+                            material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                            material.useAlphaFromDiffuseTexture = true;
                         }
                         
                         // Gör blommor och svampar delvis genomskinliga
-                        if (type === blockTypes.FLOWER_RED || 
-                            type === blockTypes.FLOWER_YELLOW || 
-                            type === blockTypes.MUSHROOM) {
+                        if (type === blockTypes.MUSHROOM) {
                             material.alpha = 0.8;
+                            material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+                            material.separateCullingPass = true;
+                            material.backFaceCulling = false;
+                        }
+                        
+                        // Uppdatera materialhanteringen för dirt
+                        if (type === blockTypes.DIRT) {
+                            const dirtTexture = new BABYLON.Texture("src/textures/dirt.png", scene);
+                            material.diffuseTexture = dirtTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                            material.ambientColor = new BABYLON.Color3(0.35, 0.25, 0.15);
+                            material.emissiveColor = new BABYLON.Color3(0.05, 0.03, 0.02);
+                            dirtTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
+                        }
+                        
+                        // Lägg till diamond-textur
+                        if (type === blockTypes.DIAMOND) {
+                            const diamondTexture = new BABYLON.Texture("src/textures/diamond.png", scene);
+                            material.diffuseTexture = diamondTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                            material.ambientColor = new BABYLON.Color3(0.2, 0.8, 0.8);
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.3, 0.3);
+                            diamondTexture.onLoadObservable.add(() => {
+                                material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+                            });
                         }
                         
                         blockMaterials[materialKey] = material;
+                    } else {
+                        material = blockMaterials[materialKey];
                     }
                     
-                    box.material = blockMaterials[materialKey];
+                    box.material = material;
                     box.blockType = type;
+                    
+                    // Uppdatera renderingsgrupper för olika blocktyper
+                    if (type === blockTypes.TREE_LEAVES || type === blockTypes.TREE_TRUNK) {
+                        box.renderingGroupId = 0;  // Samma renderingsgrupp som andra block
+                    } else if (type === blockTypes.CLOUD) {
+                        box.renderingGroupId = 1;
+                    } else if (type === blockTypes.SUN) {
+                        box.renderingGroupId = 0;
+                    } else {
+                        box.renderingGroupId = 0;
+                    }
+                    
                     blockMeshes[key] = box;
                     blockCount++;
-                    
-                    if (blockCount % 100 === 0) {
-                        debugLog(`Skapat ${blockCount} block`);
-                    }
                     
                     return box;
                 }
                 
-                // Hjälpfunktion för att skapa ett träd
+                // Uppdatera createTree-funktionen för att använda samma bark för hela trädet
                 function createTree(x, y, z) {
-                    const height = 4 + Math.floor(Math.random() * 3); // Trädhöjd 4-6 block
+                    const height = 5 + Math.floor(Math.random() * 3); // Trädhöjd 5-7 block
                     
                     // Kontrollera om platsen är ledig för ett träd
                     for (let i = 0; i < height; i++) {
@@ -575,28 +884,66 @@
                         }
                     }
                     
-                    // Skapa stam
+                    // Bestäm vilken bark-textur detta träd ska använda
+                    const useAlternativeBark = Math.random() < 0.5;
+                    const barkMaterialKey = `material_${blockTypes.TREE_TRUNK}_${useAlternativeBark ? 'v2' : 'v1'}`;
+                    
+                    // Skapa stam med samma bark-textur
                     for (let i = 0; i < height; i++) {
-                        createBlock(x, y + i, z, blockTypes.TREE_TRUNK);
+                        const trunkBlock = BABYLON.MeshBuilder.CreateBox(
+                            `block_${x},${y + i},${z}`,
+                            { size: 1 },
+                            scene
+                        );
+                        trunkBlock.position = new BABYLON.Vector3(x, y + i, z);
+                        trunkBlock.checkCollisions = true;
+                        trunkBlock.isPickable = true;
+                        
+                        // Återanvänd eller skapa material för denna bark-typ
+                        let material;
+                        if (!blockMaterials[barkMaterialKey]) {
+                            material = new BABYLON.StandardMaterial(barkMaterialKey, scene);
+                            material.diffuseColor = blockColors[blockTypes.TREE_TRUNK];
+                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                            material.ambientColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.05, 0);
+                            
+                            const barkTexture = new BABYLON.Texture(
+                                useAlternativeBark ? "src/textures/tree3.png" : "src/textures/tree2.png",
+                                scene
+                            );
+                            material.diffuseTexture = barkTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            
+                            blockMaterials[barkMaterialKey] = material;
+                        } else {
+                            material = blockMaterials[barkMaterialKey];
+                        }
+                        
+                        trunkBlock.material = material;
+                        trunkBlock.blockType = blockTypes.TREE_TRUNK;
+                        trunkBlock.renderingGroupId = 0;
+                        
+                        const key = `${x},${y + i},${z}`;
+                        blockMeshes[key] = trunkBlock;
+                        blockCount++;
                     }
                     
-                    // Skapa lövverk (som en naturlig krona)
-                    const leafStart = height - 3;  // Börja lövverket 3 block från toppen
+                    // Skapa lövverk (som tidigare)
+                    const leafStart = height - 4;
                     
-                    // Skapa en mer naturlig trädkrona
-                    for (let dy = 0; dy < 4; dy++) {  // 4 nivåer av löv
-                        const radius = dy === 1 || dy === 2 ? 2 : 1;  // Större radie i mitten
+                    for (let dy = 0; dy < 5; dy++) {
+                        const radius = dy === 1 || dy === 2 || dy === 3 ? 2 : 1;
                         
                         for (let dx = -radius; dx <= radius; dx++) {
                             for (let dz = -radius; dz <= radius; dz++) {
-                                // Skapa en mer naturlig, rundad form
-                                if (dx*dx + dz*dz <= radius*radius + 0.5) {
+                                if (Math.abs(dx) <= radius && Math.abs(dz) <= radius) {
                                     const leafX = x + dx;
                                     const leafY = y + leafStart + dy;
                                     const leafZ = z + dz;
                                     
-                                    // Lägg till lite slumpmässighet för att göra det mer naturligt
-                                    if (Math.random() > 0.1) {  // 90% chans att placera ett löv
+                                    if (Math.random() > 0.05) {
                                         const leafKey = `${leafX},${leafY},${leafZ}`;
                                         if (!blockMeshes[leafKey]) {
                                             createBlock(leafX, leafY, leafZ, blockTypes.TREE_LEAVES);
@@ -607,28 +954,15 @@
                         }
                     }
                     
-                    // Lägg till några extra löv för att göra kronan mer oregelbunden
-                    for (let i = 0; i < 5; i++) {
-                        const dx = Math.floor(Math.random() * 5) - 2;
-                        const dy = Math.floor(Math.random() * 2);
-                        const dz = Math.floor(Math.random() * 5) - 2;
-                        
-                        const leafX = x + dx;
-                        const leafY = y + leafStart + dy;
-                        const leafZ = z + dz;
-                        
-                        const leafKey = `${leafX},${leafY},${leafZ}`;
-                        if (!blockMeshes[leafKey]) {
-                            createBlock(leafX, leafY, leafZ, blockTypes.TREE_LEAVES);
-                        }
-                    }
-                    
                     return true;
                 }
                 
                 // Hjälpfunktion för att skapa en blomma
                 function createFlower(x, y, z) {
-                    const type = Math.random() < 0.5 ? blockTypes.FLOWER_RED : blockTypes.FLOWER_YELLOW;
+                    const random = Math.random();
+                    const type = random < 0.33 ? blockTypes.FLOWER_RED : 
+                                random < 0.66 ? blockTypes.FLOWER_YELLOW :
+                                blockTypes.FLOWER_PURPLE;
                     createBlock(x, y, z, type);
                 }
                 
@@ -637,8 +971,109 @@
                     createBlock(x, y, z, blockTypes.MUSHROOM);
                 }
                 
-                // Generera terräng för trollskogen
-                debugLog('Skapar trollskog...');
+                // Uppdatera createCloud-funktionen
+                function createCloud(centerX, centerY, centerZ) {
+                    const cloudSize = 3 + Math.floor(Math.random() * 4);
+                    const cloudHeight = 1 + Math.floor(Math.random() * 2);
+                    
+                    for (let y = 0; y < cloudHeight; y++) {
+                        for (let x = -cloudSize; x <= cloudSize; x++) {
+                            for (let z = -cloudSize; z <= cloudSize; z++) {
+                                if (x*x + z*z <= cloudSize*cloudSize) {
+                                    if (Math.random() < 0.7) {
+                                        const cloudX = centerX + x;
+                                        const cloudY = centerY + y;
+                                        const cloudZ = centerZ + z;
+                                        const key = `${cloudX},${cloudY},${cloudZ}`;
+                                        
+                                        if (!blockMeshes[key]) {
+                                            const cloudBlock = createBlock(cloudX, cloudY, cloudZ, blockTypes.CLOUD);
+                                            // Uppdatera molnens material
+                                            const cloudMaterial = new BABYLON.StandardMaterial(`cloudMaterial_${key}`, scene);
+                                            cloudMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+                                            cloudMaterial.alpha = 0.3;
+                                            cloudMaterial.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+                                            cloudMaterial.backFaceCulling = false;
+                                            cloudMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+                                            cloudMaterial.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                                            cloudMaterial.useAlphaFromDiffuseTexture = true;
+                                            cloudMaterial.separateCullingPass = true;
+                                            cloudBlock.material = cloudMaterial;
+                                            cloudBlock.renderingGroupId = 2; // Ändra till högre renderingsgrupp
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Uppdatera createSun-funktionen för att använda faktiska 2x2x2 block
+                function createSun(x, y, z) {
+                    // Skapa en 2x2x2 sol med separata block
+                    for (let dx = 0; dx < 2; dx++) {
+                        for (let dy = 0; dy < 2; dy++) {
+                            for (let dz = 0; dz < 2; dz++) {
+                                createBlock(x + dx, y + dy, z + dz, blockTypes.SUN);
+                            }
+                        }
+                    }
+                }
+                
+                // Funktion för att placera diamanter
+                function placeDiamonds() {
+                    const size = 16;
+                    let diamondsPlaced = 0;
+                    const MAX_TREE_HEIGHT = 12; // Maxhöjd för träd (baserat på trädhöjd 5-7 + lövverk)
+                    
+                    while (diamondsPlaced < 10) {
+                        const x = -size + Math.floor(Math.random() * size * 2);
+                        const z = -size + Math.floor(Math.random() * size * 2);
+                        
+                        // Hitta högsta blocket på denna position
+                        let maxHeight = 0;
+                        for (let checkY = 0; checkY < MAX_TREE_HEIGHT; checkY++) {
+                            const key = `${x},${checkY},${z}`;
+                            if (blockMeshes[key]) {
+                                maxHeight = checkY;
+                            }
+                        }
+                        
+                        if (maxHeight > 0) {
+                            // Slumpmässigt välj om diamanten ska vara på marken eller på sten
+                            const placement = Math.random();
+                            let y = maxHeight + 1;
+                            
+                            if (placement < 0.5) {
+                                // På marken/sten - använd current height
+                                y = maxHeight + 1;
+                            } else {
+                                // På toppen av sten - leta efter stenblock
+                                for (let checkY = maxHeight; checkY > 0; checkY--) {
+                                    const key = `${x},${checkY},${z}`;
+                                    if (blockMeshes[key] && blockMeshes[key].blockType === blockTypes.STONE) {
+                                        y = checkY + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Kontrollera att vi inte placerar diamanten för högt
+                            if (y <= MAX_TREE_HEIGHT) {
+                                // Placera diamanten om positionen är ledig
+                                const key = `${x},${y},${z}`;
+                                if (!blockMeshes[key]) {
+                                    createBlock(x, y, z, blockTypes.DIAMOND);
+                                    diamondsPlaced++;
+                                    debugLog(`Diamant placerad på ${x},${y},${z}`);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Generera terräng för världen
+                debugLog('Creating world...');
                 
                 // Använd Simplex noise för att generera naturlig terräng
                 function noise(x, z) {
@@ -648,12 +1083,22 @@
                 
                 // Skapa terräng med träd och växter
                 async function generateForest() {
-                    const size = 16; // Storlek på skogen
+                    const size = 16;
+                    
+                    // Skapa solen först, placera den högre upp
+                    createSun(-10, 45, -10);
+                    
+                    // Skapa några moln på himlen, placera dem högre upp
+                    for (let i = 0; i < 8; i++) {
+                        const cloudX = -size + Math.floor(Math.random() * size * 2);
+                        const cloudZ = -size + Math.floor(Math.random() * size * 2);
+                        const cloudY = 35 + Math.floor(Math.random() * 5);
+                        createCloud(cloudX, cloudY, cloudZ);
+                    }
                     
                     // Först skapar vi terrängen
                     for (let x = -size; x <= size; x++) {
                         for (let z = -size; z <= size; z++) {
-                            // Beräkna höjd med noise
                             const height = Math.floor(baseHeight + noise(x, z));
                             
                             // Skapa markblock
@@ -664,15 +1109,8 @@
                                 createBlock(x, y, z, blockType);
                             }
                             
-                            // Lägg till moss på vissa block (minskat sannolikheten)
-                            if (Math.random() < 0.05) {  // Ändrat från 0.1 till 0.05
-                                createBlock(x, height, z, blockTypes.MOSS);
-                            }
-                            
-                            // Placera träd med viss sannolikhet
-                            if (Math.random() < 0.05 && 
-                                Math.abs(x) > 3 && Math.abs(z) > 3) {
-                                // Kontrollera närliggande block för att undvika träd för nära varandra
+                            // Placera träd
+                            if (Math.random() < 0.05 && Math.abs(x) > 3 && Math.abs(z) > 3) {
                                 let canPlaceTree = true;
                                 for (let dx = -2; dx <= 2; dx++) {
                                     for (let dz = -2; dz <= 2; dz++) {
@@ -688,20 +1126,25 @@
                                 }
                             }
                             
-                            // Placera blommor och svampar mer sällan
-                            if (Math.random() < 0.03) {  // Ändrat från 0.1 till 0.03
-                                if (Math.random() < 0.7) {
-                                    createFlower(x, height + 1, z);
-                                } else {
-                                    createMushroom(x, height + 1, z);
-                                }
+                            // Placera blommor
+                            if (Math.random() < 0.03) {
+                                createFlower(x, height + 1, z);
                             }
                             
-                            // Placera några trollstenar
-                            if (Math.random() < 0.02) {
-                                const stoneHeight = Math.floor(1 + Math.random() * 2);
-                                for (let h = 0; h < stoneHeight; h++) {
-                                    createBlock(x, height + 1 + h, z, blockTypes.TROLL_STONE);
+                            // Placera stenformationer
+                            if (Math.random() < 0.02 && Math.abs(x) > 2 && Math.abs(z) > 2) {
+                                let canPlaceStone = true;
+                                for (let dx = -2; dx <= 2; dx++) {
+                                    for (let dz = -2; dz <= 2; dz++) {
+                                        const nearbyKey = `${x + dx},${height + 1},${z + dz}`;
+                                        if (blockMeshes[nearbyKey]) {
+                                            canPlaceStone = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (canPlaceStone) {
+                                    createStoneFormation(x, height + 1, z);
                                 }
                             }
                             
@@ -709,33 +1152,113 @@
                             scene.render();
                         }
                         
-                        // Uppdatera laddningsprocent
                         const progress = ((x + size) / (size * 2)) * 100;
-                        updateLoadingProgress(progress, `Skapar trollskog... ${Math.round(progress)}%`);
+                        updateLoadingProgress(progress, `Generating world... ${Math.round(progress)}%`);
+                    }
+                    
+                    // Placera diamanter efter att världen är genererad
+                    placeDiamonds();
+                    
+                    // Stoppa intro-ljudet när världen är färdigladdad
+                    introSound.pause();
+                    introSound.currentTime = 0;
+                }
+                
+                // Lägg till funktion för att skapa stenformationer
+                function createStoneFormation(x, y, z) {
+                    const height = 2 + Math.floor(Math.random() * 3); // Höjd 2-4 block
+                    const width = 2 + Math.floor(Math.random() * 2);  // Bredd 2-3 block
+                    
+                    for (let dy = 0; dy < height; dy++) {
+                        const currentWidth = Math.max(1, width - Math.floor(dy/2)); // Smalare högre upp
+                        for (let dx = -currentWidth; dx <= currentWidth; dx++) {
+                            for (let dz = -currentWidth; dz <= currentWidth; dz++) {
+                                // Skapa en mer naturlig, oregelbunden form
+                                if (dx*dx + dz*dz <= currentWidth*currentWidth + 0.5) {
+                                    if (Math.random() > 0.2) { // 80% chans att placera block
+                                        createBlock(x + dx, y + dy, z + dz, blockTypes.STONE);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
-                // Generera skogen
+                // Generera världen
                 await generateForest();
-                debugLog('Trollskog skapad!');
+                debugLog('World created!');
                 
                 // Starta renderingsloopen
                 engine.runRenderLoop(function() {
-                    scene.render();
-                });
-                
-                // Dölj laddningsskärmen
+                scene.render();
+            });
+            
+                // Dölj laddningsskärmen och spela start-ljudet
                 hideLoadingScreen();
                 
+                // Spela start-ljudet med en liten fördröjning för att säkerställa att intro-ljudet är klart
+                setTimeout(() => {
+                    startSound.play().catch(error => {
+                        console.error("Kunde inte spela start-ljudet:", error);
+                        debugLog("Ljudfel: " + error.message);
+                    });
+                }, 500);
+                
                 window.addEventListener('resize', function() {
-                    engine.resize();
+                engine.resize();
+            });
+                
+                // Add this after scene creation
+                engine.setHardwareScalingLevel(1.0);
+                engine.cullBackFaces = true;
+                engine.setDepthBuffer(true);
+                engine.setDepthWrite(true);
+                
+                // Aktivera depth pre-pass för bättre z-sortering
+                scene.enableDepthRenderer();
+                
+                // Konfigurera renderingsordning
+                scene.setRenderingOrder(BABYLON.RenderingGroupInfo.OPAQUE_FIRST);
+                
+                // Uppdatera renderingsordningen men behåll depth sorting
+                scene.setRenderingOrder(BABYLON.RenderingGroupInfo.OPAQUE_FIRST, (a, b) => {
+                    // Om ett av objekten är ett moln, prioritera det
+                    if (a.blockType === blockTypes.CLOUD) return 1;
+                    if (b.blockType === blockTypes.CLOUD) return -1;
+                    
+                    // Om båda är moln eller inget är moln, sortera efter z-position
+                    if (a.renderingGroupId === b.renderingGroupId) {
+                        return b.position.z - a.position.z;
+                    }
+                    return b.renderingGroupId - a.renderingGroupId;
                 });
+                
+                // Behåll depth sorting för transparenta objekt
+                scene.needDepthPrePass = true;
+                scene.separateTransparentPass = true;
+                scene.useOrderIndependentTransparency = true;
                 
             } catch (error) {
                 debugLog('ERROR: ' + error.message);
                 console.error(error);
             }
-        });
+        }
+
+        // Ta bort den automatiska diamantinsamlingen
+        function checkForDiamonds() {
+            // Denna funktion behövs inte längre
+            return;
+        }
+
+        // Lägg till en funktion för att hantera ljuduppspelning
+        async function playSound(sound) {
+            try {
+                await sound.play();
+            } catch (error) {
+                console.error("Kunde inte spela ljud:", error);
+                debugLog("Ljudfel: " + error.message);
+            }
+        }
     </script>
 </body>
 </html>
