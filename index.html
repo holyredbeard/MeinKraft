@@ -1,512 +1,680 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <title>BabylonJS Minecraft Clone</title>
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <meta charset="UTF-8">
+    <title>MeinKraft - Space Edition</title>
     <style>
-        html, body {
-            width: 100%;
-            height: 100%;
+        body, html {
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            background-color: black;
+            font-family: Arial, sans-serif;
         }
         #renderCanvas {
             width: 100%;
             height: 100%;
             touch-action: none;
         }
-        #ui-container {
-            position: absolute;
+        #loadingScreen {
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 2000;
         }
-        .hotbar {
-            position: absolute;
+        #loadingBar {
+            width: 300px;
+            height: 30px;
+            background-color: #333;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        #loadingProgress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s;
+        }
+        #loadingText {
+            margin-top: 10px;
+            font-family: monospace;
+        }
+        #debug {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 1000;
+        }
+        #instructions {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 1000;
+        }
+        #hotbar {
+            position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             gap: 5px;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 8px;
-            border-radius: 10px;
-            pointer-events: all;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
         }
-        .hotbar-slot {
+        .hotbar-item {
             width: 50px;
             height: 50px;
-            background-color: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            border: 2px solid #666;
             border-radius: 5px;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
             cursor: pointer;
+            transition: border-color 0.3s;
         }
-        .hotbar-slot.active {
+        .hotbar-item.selected {
             border-color: white;
-            background-color: rgba(255, 255, 255, 0.4);
         }
-        .hotbar-slot img {
-            width: 40px;
-            height: 40px;
-            image-rendering: pixelated;
-        }
-        .crosshair {
-            position: absolute;
+        #crosshair {
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-        }
-        .crosshair::before, .crosshair::after {
-            content: '';
-            position: absolute;
-            background-color: white;
-        }
-        .crosshair::before {
-            width: 2px;
-            height: 20px;
-            left: 9px;
-            top: 0;
-        }
-        .crosshair::after {
-            width: 20px;
-            height: 2px;
-            left: 0;
-            top: 9px;
-        }
-        #loading-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #1a1a1a;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
             color: white;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        .progress-bar {
-            width: 300px;
-            height: 20px;
-            background-color: #333;
-            margin-top: 20px;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .progress {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s;
+            font-size: 24px;
+            pointer-events: none;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
-    <canvas id="renderCanvas"></canvas>
-    
-    <div id="ui-container">
-        <div class="crosshair"></div>
-        <div class="hotbar">
-            <div class="hotbar-slot active" data-block="grass">
-                <div style="width: 40px; height: 40px; background: #67a367;"></div>
-            </div>
-            <div class="hotbar-slot" data-block="dirt">
-                <div style="width: 40px; height: 40px; background: #996633;"></div>
-            </div>
-            <div class="hotbar-slot" data-block="stone">
-                <div style="width: 40px; height: 40px; background: #b3b3b3;"></div>
-            </div>
-            <div class="hotbar-slot" data-block="wood">
-                <div style="width: 40px; height: 40px; background: #80471c;"></div>
-            </div>
-            <div class="hotbar-slot" data-block="leaves">
-                <div style="width: 40px; height: 40px; background: #336633;"></div>
-            </div>
+    <div id="loadingScreen">
+        <h2>Laddar Mars...</h2>
+        <div id="loadingBar">
+            <div id="loadingProgress"></div>
         </div>
+        <div id="loadingText">Förbereder terräng...</div>
     </div>
+    <canvas id="renderCanvas" touch-action="none"></canvas>
+    <div id="debug">Loading...</div>
+    <div id="instructions">
+        WASD/Pilar = Rörelse<br>
+        Mellanslag = Hoppa<br>
+        Vänsterklick = Ta bort block<br>
+        Högerklick = Placera block<br>
+        1-6 = Välj block<br>
+        ESC = Frigör muspekare
+    </div>
+    <div id="crosshair">+</div>
+    <div id="hotbar"></div>
     
-    <div id="loading-screen">
-        <h1 class="text-4xl mb-4">Loading Minecraft Clone</h1>
-        <div class="progress-bar">
-            <div class="progress" id="progress-bar"></div>
-        </div>
-        <p class="mt-4" id="loading-text">Initializing engine...</p>
-    </div>
-
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async function() {
-            const updateLoadingScreen = (text, progress) => {
-                document.getElementById('loading-text').textContent = text;
-                document.getElementById('progress-bar').style.width = `${progress}%`;
-            };
-            
-            const canvas = document.getElementById("renderCanvas");
-            updateLoadingScreen("Initializing engine...", 10);
-            const engine = new BABYLON.Engine(canvas, true);
-            
-            updateLoadingScreen("Creating scene...", 20);
-            const scene = new BABYLON.Scene(engine);
-            scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.98, 1);
-            
-            updateLoadingScreen("Setting up camera...", 30);
-            const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(16, 20, 16), scene);
-            camera.attachControl(canvas, true);
-            camera.applyGravity = true;
-            camera.ellipsoid = new BABYLON.Vector3(0.5, 1.8, 0.5);
-            camera.checkCollisions = true;
-            camera.minZ = 0.1;
-            camera.speed = 0.5;
-            camera.angularSensibility = 2000;
-            camera.inertia = 0.5;
-            
-            // Lägg till zoom-funktionalitet med tangentbord
-            const MIN_FOV = 0.5;
-            const MAX_FOV = 1.5;
-            let currentFOV = 1.0;
-            
-            window.addEventListener('keydown', (e) => {
-                // Zooma in med + tangenten
-                if (e.key === '+' || e.key === '=') {
-                    currentFOV = Math.max(MIN_FOV, currentFOV - 0.1);
-                    camera.fov = currentFOV;
+        // Konstanter för världen
+        const WORLD_SIZE = 32;
+        const CHUNK_SIZE = 16;
+        const MAX_HEIGHT = 32;
+        const SPAWN_HEIGHT = 10;
+        const SPAWN_X = 0;
+        const SPAWN_Z = 0;
+        const baseHeight = 5;
+        
+        // Block typer för trollskogen
+        const blockTypes = {
+            GRASS: 'grass',
+            DIRT: 'dirt',
+            STONE: 'stone',
+            TREE_TRUNK: 'tree_trunk',
+            TREE_LEAVES: 'tree_leaves',
+            FLOWER_RED: 'flower_red',
+            FLOWER_YELLOW: 'flower_yellow',
+            MUSHROOM: 'mushroom',
+            TROLL_STONE: 'troll_stone',  // För förtrollade troll!
+            MOSS: 'moss'                  // För extra atmosfär
+        };
+        
+        // Blockfärger för sommarskog
+        const blockColors = {
+            [blockTypes.GRASS]: new BABYLON.Color3(0.4, 0.7, 0.3),      // Ljust grönt gräs
+            [blockTypes.DIRT]: new BABYLON.Color3(0.4, 0.3, 0.2),       // Mörk jord
+            [blockTypes.STONE]: new BABYLON.Color3(0.6, 0.6, 0.6),      // Grå sten
+            [blockTypes.TREE_TRUNK]: new BABYLON.Color3(0.3, 0.2, 0.1), // Mörkt trä
+            [blockTypes.TREE_LEAVES]: new BABYLON.Color3(0.3, 0.5, 0.2), // Mörkgröna löv
+            [blockTypes.FLOWER_RED]: new BABYLON.Color3(0.8, 0.2, 0.2),  // Röda blommor
+            [blockTypes.FLOWER_YELLOW]: new BABYLON.Color3(0.9, 0.8, 0.2), // Gula blommor
+            [blockTypes.MUSHROOM]: new BABYLON.Color3(0.8, 0.4, 0.4),    // Rosa svamp
+            [blockTypes.TROLL_STONE]: new BABYLON.Color3(0.5, 0.5, 0.55), // Trollsten (lite blåaktig)
+            [blockTypes.MOSS]: new BABYLON.Color3(0.3, 0.4, 0.2)         // Mörk mossa
+        };
+        
+        let blockCount = 0;
+        const blockMeshes = {};
+        const blockMaterials = {};
+        
+        function debugLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const fullMessage = `${timestamp}: ${message}`;
+            console.log(fullMessage);
+            const debugElement = document.getElementById('debug');
+            if (debugElement) {
+                debugElement.innerHTML = fullMessage + '<br>' + debugElement.innerHTML;
+                if (debugElement.innerHTML.split('<br>').length > 20) {
+                    debugElement.innerHTML = debugElement.innerHTML.split('<br>').slice(0, 20).join('<br>');
                 }
-                // Zooma ut med - tangenten
-                if (e.key === '-' || e.key === '_') {
-                    currentFOV = Math.min(MAX_FOV, currentFOV + 0.1);
-                    camera.fov = currentFOV;
-                }
-            });
-            
-            camera.keysUp = [87, 38];    // W och pil upp
-            camera.keysDown = [83, 40];  // S och pil ner
-            camera.keysLeft = [65, 37];  // A och pil vänster
-            camera.keysRight = [68, 39]; // D och pil höger
-            
-            scene.collisionsEnabled = true;
-            scene.gravity = new BABYLON.Vector3(0, -0.5, 0);
-            
-            // Förbättrad hoppmekanik
-            let isJumping = false;
-            let canJump = true;
-            const JUMP_SPEED = 0.4;
-            const INITIAL_POSITION_Y = 2;
-            
-            // Sätt kamerans starthöjd
-            camera.position.y = INITIAL_POSITION_Y;
-            
-            // Hantera hopp och gravitation
-            scene.registerBeforeRender(() => {
-                // Kontrollera om kameran är på marken
-                if (camera.position.y <= INITIAL_POSITION_Y) {
-                    camera.position.y = INITIAL_POSITION_Y;
-                    isJumping = false;
-                    canJump = true;
-                }
-            });
-            
-            // Hantera knapptryckningar
-            window.addEventListener('keydown', (e) => {
-                // Hoppa med mellanslag
-                if (e.code === 'Space' && canJump && !isJumping) {
-                    isJumping = true;
-                    canJump = false;
-                    camera.cameraDirection.y = JUMP_SPEED;
-                    setTimeout(() => {
-                        camera.cameraDirection.y = 0;
-                    }, 100);
-                }
-                
-                // Krypa med shift
-                if (e.key === 'Shift') {
-                    camera.speed = 0.25;
-                    camera.position.y = 1;
-                }
-            });
-            
-            window.addEventListener('keyup', (e) => {
-                if (e.key === 'Shift') {
-                    camera.speed = 0.5;
-                    if (!isJumping) {
-                        camera.position.y = INITIAL_POSITION_Y;
-                    }
-                }
-            });
-            
-            scene.onBeforeRenderObservable.clear();
-            scene.actionManager = new BABYLON.ActionManager(scene);
-            
-            // Initiera inputStates objektet
-            scene.inputStates = {};
-            
-            scene.actionManager.registerAction(
-                new BABYLON.ExecuteCodeAction(
-                    BABYLON.ActionManager.OnKeyDownTrigger,
-                    function (evt) {
-                        scene.inputStates[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-                    }
-                )
-            );
-            
-            scene.actionManager.registerAction(
-                new BABYLON.ExecuteCodeAction(
-                    BABYLON.ActionManager.OnKeyUpTrigger,
-                    function (evt) {
-                        scene.inputStates[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-                    }
-                )
-            );
-            
-            updateLoadingScreen("Loading textures...", 40);
-            const createTexture = (color) => {
-                const texture = new BABYLON.Texture("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", scene);
-                texture.hasAlpha = true;
-                return texture;
-            };
+            }
+        }
+        
+        // Blockera specifika felmeddelanden
+        const originalConsoleError = console.error;
+        console.error = function() {
+            const errorMessage = Array.from(arguments).join(' ');
+            if (errorMessage.includes('moz-extension') || 
+                errorMessage.includes('Receiving end does not exist') ||
+                errorMessage.includes('PHANTOM') ||
+                errorMessage.includes('contentScript.js') ||
+                errorMessage.includes('solanaActionsContentScript.js') ||
+                errorMessage.includes('WEBGL_debug_renderer_info')) {
+                return;
+            }
+            debugLog('ERROR: ' + errorMessage);
+            originalConsoleError.apply(console, arguments);
+        };
+        
+        // Hantera fel från Phantom extension
+        window.onerror = function(message, source) {
+            if (source && (source.includes('moz-extension') || 
+                          source.includes('PHANTOM') || 
+                          source.includes('contentScript.js') || 
+                          source.includes('solanaActionsContentScript.js'))) {
+                return true;
+            }
+        };
+        
+        // Hantera unhandled promise rejections
+        window.onunhandledrejection = function(event) {
+            if (event.reason && event.reason.message && 
+                (event.reason.message.includes('moz-extension') || 
+                 event.reason.message.includes('Receiving end does not exist') ||
+                 event.reason.message.includes('PHANTOM'))) {
+                event.preventDefault();
+            }
+        };
+        
+        // Uppdatera laddningsindikator
+        function updateLoadingProgress(progress, text) {
+            const progressBar = document.getElementById('loadingProgress');
+            const loadingText = document.getElementById('loadingText');
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+            }
+            if (loadingText && text) {
+                loadingText.textContent = text;
+            }
+        }
 
-            const blockMaterials = {};
-            
-            // Pre-create materials for each block type
-            const createMaterial = (type) => {
-                if (blockMaterials[type]) return blockMaterials[type];
+        // Dölj laddningsskärm
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('loadingScreen');
+            if (loadingScreen) {
+                loadingScreen.style.display = 'none';
+            }
+        }
+
+        // Starta spelet när sidan laddas
+        window.addEventListener('load', async function() {
+            try {
+                debugLog('=== STARTAR TROLLSKOGEN ===');
                 
-                const colors = {
-                    grass: {
-                        top: [0.4, 0.9, 0.4],    // Ljusgrön för gräs topp
-                        side: [0.4, 0.7, 0.4],   // Mörkare grön för sidor
-                        bottom: [0.6, 0.4, 0.2]  // Brun för botten (jord)
-                    },
-                    dirt: { 
-                        all: [0.6, 0.4, 0.2]     // Brun för jord
-                    },
-                    stone: { 
-                        all: [0.7, 0.7, 0.7]     // Grå för sten
-                    },
-                    wood: {
-                        top: [0.6, 0.4, 0.2],    // Brun för trä topp
-                        side: [0.5, 0.3, 0.1]    // Mörkare brun för trä sidor
-                    },
-                    leaves: { 
-                        all: [0.2, 0.6, 0.2]     // Mörkgrön för löv
+                const canvas = document.getElementById('renderCanvas');
+                const engine = new BABYLON.Engine(canvas, true);
+                const scene = new BABYLON.Scene(engine);
+                
+                // Ljusblå sommarhimmel
+                scene.clearColor = new BABYLON.Color4(0.6, 0.8, 1.0, 1);
+                
+                // Aktivera fysik och kollisioner
+                scene.collisionsEnabled = true;
+                scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
+                
+                // Skapa starkt solljus för en sommardag
+                const light = new BABYLON.HemisphericLight(
+                    "sunLight",
+                    new BABYLON.Vector3(0.2, 1, 0.3),
+                    scene
+                );
+                light.intensity = 1.2;
+                light.groundColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                
+                // Lägg till lite dimma för mystisk känsla
+                scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+                scene.fogDensity = 0.01;
+                scene.fogColor = new BABYLON.Color3(0.8, 0.9, 1.0);
+                
+                debugLog('Miljö skapad');
+                
+                // Skapa FPS-kamera
+                const camera = new BABYLON.UniversalCamera(
+                    "camera",
+                    new BABYLON.Vector3(SPAWN_X, baseHeight + 2, SPAWN_Z),
+                    scene
+                );
+                
+                // Grundläggande kamerainställningar
+                camera.attachControl(canvas, true);
+                camera.speed = 0.5;
+                camera.fov = 1.5; // Max utzoom
+                camera.minZ = 0.1;
+                camera.inertia = 0.5;
+                camera.angularSensibility = 1000;
+                
+                // Inaktivera all fysik för kameran
+                camera.checkCollisions = false;
+                camera.applyGravity = false;
+                camera.ellipsoid = new BABYLON.Vector3(0.4, 0.8, 0.4);
+                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.8, 0);
+
+                // Sätt kamerans position direkt efter att scenen har renderats första gången
+                scene.executeWhenReady(() => {
+                    camera.position.y = baseHeight + 2;
+                });
+                
+                // Sätt upp kontroller för WASD och piltangenter
+                const keysForward = [87, 38];  // W och pil upp
+                const keysBackward = [83, 40]; // S och pil ner
+                const keysLeft = [65, 37];     // A och pil vänster 
+                const keysRight = [68, 39];    // D och pil höger
+
+                camera.keysUp = keysForward;
+                camera.keysDown = keysBackward;
+                camera.keysLeft = keysLeft;
+                camera.keysRight = keysRight;
+
+                // Hantera zoom med +/- tangenter
+                window.addEventListener('keydown', function(evt) {
+                    if (evt.key === '+' || evt.key === '=') {
+                        camera.fov = Math.max(0.5, camera.fov - 0.1);
+                    } else if (evt.key === '-' || evt.key === '_') {
+                        camera.fov = Math.min(1.5, camera.fov + 0.1);
+                    }
+                });
+                
+                // Hantera pointer lock
+                let isLocked = false;
+                
+                // Klickhantering för att låsa/frigöra musen
+                canvas.addEventListener('click', function() {
+                    if (!isLocked) {
+                        canvas.requestPointerLock = canvas.requestPointerLock || 
+                                                  canvas.mozRequestPointerLock;
+                        canvas.requestPointerLock();
+                    }
+                });
+                
+                // Lyssna på pointer lock ändringar
+                document.addEventListener("pointerlockchange", lockChangeAlert, false);
+                document.addEventListener("mozpointerlockchange", lockChangeAlert, false);
+                
+                function lockChangeAlert() {
+                    isLocked = document.pointerLockElement === canvas ||
+                              document.mozPointerLockElement === canvas;
+                    
+                    if (isLocked) {
+                        debugLog("Muspekare låst");
+                    } else {
+                        debugLog("Muspekare frigjord");
+                    }
+                }
+                
+                // Hantera block-interaktioner
+                let selectedBlockType = blockTypes.DIRT;
+                
+                // Hantera hopp med mellanslag
+                let canJump = true;
+                let jumpVelocity = 0;
+                const JUMP_FORCE = 1.0; // Ökad hopphöjd
+                const GRAVITY = 0.05; // Ökad gravitation
+                
+                window.addEventListener('keydown', function(evt) {
+                    if (evt.code === 'Space' && canJump) {
+                        jumpVelocity = JUMP_FORCE;
+                        canJump = false;
+                        setTimeout(() => { canJump = true; }, 500); // Kortare cooldown
+                    }
+                });
+
+                // Uppdatera hopp och gravitation i renderingsloopen
+                scene.registerBeforeRender(function() {
+                    if (jumpVelocity !== 0) {
+                        camera.position.y += jumpVelocity;
+                        jumpVelocity -= GRAVITY;
+                        
+                        // Kontrollera om vi har landat
+                        const pickInfo = scene.pickWithRay(new BABYLON.Ray(
+                            camera.position,
+                            new BABYLON.Vector3(0, -1, 0),
+                            2 // Kontrollera 2 enheter nedåt
+                        ));
+                        
+                        if (pickInfo.hit && jumpVelocity < 0) {
+                            camera.position.y = pickInfo.pickedPoint.y + 2;
+                            jumpVelocity = 0;
+                            canJump = true;
+                        }
+                    }
+                });
+                
+                // Funktion för att placera block
+                function placeBlock(pickInfo) {
+                    if (pickInfo.hit) {
+                        const pickedPoint = pickInfo.pickedPoint;
+                        const normal = pickInfo.getNormal();
+                        
+                        // Beräkna position för det nya blocket
+                        const position = new BABYLON.Vector3(
+                            Math.floor(pickedPoint.x),
+                            Math.floor(pickedPoint.y),
+                            Math.floor(pickedPoint.z)
+                        );
+                        
+                        // Lägg till blocket på den sida som klickades
+                        position.x += Math.round(normal.x);
+                        position.y += Math.round(normal.y);
+                        position.z += Math.round(normal.z);
+                        
+                        // Kontrollera om positionen är giltig
+                        const key = `${position.x},${position.y},${position.z}`;
+                        if (!blockMeshes[key]) {
+                            createBlock(position.x, position.y, position.z, selectedBlockType);
+                            debugLog(`Block placerat vid ${key}`);
+                        }
+                    }
+                }
+                
+                // Funktion för att ta bort block
+                function removeBlock(pickInfo) {
+                    if (pickInfo.hit && pickInfo.pickedMesh && pickInfo.pickedMesh.blockType) {
+                        const position = pickInfo.pickedMesh.position;
+                        const key = `${Math.floor(position.x)},${Math.floor(position.y)},${Math.floor(position.z)}`;
+                        if (blockMeshes[key]) {
+                            blockMeshes[key].dispose();
+                            delete blockMeshes[key];
+                            debugLog(`Block borttaget vid ${key}`);
+                        }
+                    }
+                }
+                
+                // Hantera musklick för blockinteraktion
+                scene.onPointerDown = function(evt) {
+                    if (!isLocked) {
+                        canvas.requestPointerLock();
+                        return;
+                    }
+                    
+                    const pickInfo = scene.pick(scene.pointerX, scene.pointerY);
+                    
+                    if (evt.button === 0) { // Vänsterklick - ta bort block
+                        removeBlock(pickInfo);
                     }
                 };
                 
-                if (colors[type].all) {
-                    const material = new BABYLON.StandardMaterial(type, scene);
-                    material.diffuseColor = new BABYLON.Color3(...colors[type].all);
-                    blockMaterials[type] = material;
-                    return material;
-                } else {
-                    const multiMat = new BABYLON.MultiMaterial(type, scene);
-                    const topMat = new BABYLON.StandardMaterial(`${type}_top`, scene);
-                    const sideMat = new BABYLON.StandardMaterial(`${type}_side`, scene);
-                    const bottomMat = new BABYLON.StandardMaterial(`${type}_bottom`, scene);
-                    
-                    topMat.diffuseColor = new BABYLON.Color3(...colors[type].top);
-                    sideMat.diffuseColor = new BABYLON.Color3(...colors[type].side);
-                    bottomMat.diffuseColor = new BABYLON.Color3(...(colors[type].bottom || colors[type].side));
-                    
-                    multiMat.subMaterials = [
-                        sideMat, sideMat, topMat, bottomMat, sideMat, sideMat
+                // Hantera CMD+click för blockplacering
+                canvas.addEventListener('click', function(evt) {
+                    if (evt.metaKey && isLocked) {
+                        const pickInfo = scene.pick(scene.pointerX, scene.pointerY);
+                        placeBlock(pickInfo);
+                    }
+                });
+                
+                // Förhindra högerklicksmenyn
+                canvas.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                });
+                
+                // Hantera blockval med siffertangenter
+                window.addEventListener('keydown', function(evt) {
+                    const blockTypes = [
+                        blockTypes.DIRT,
+                        blockTypes.GRASS,
+                        blockTypes.STONE,
+                        blockTypes.TREE_TRUNK,
+                        blockTypes.TREE_LEAVES,
+                        blockTypes.MOSS
                     ];
                     
-                    blockMaterials[type] = multiMat;
-                    return multiMat;
-                }
-            };
-            
-            // Pre-create all materials
-            Object.keys({grass: 1, dirt: 1, stone: 1, wood: 1, leaves: 1}).forEach(createMaterial);
-            
-            const createBlock = (x, y, z, type) => {
-                const block = BABYLON.MeshBuilder.CreateBox(`block_${x}_${y}_${z}`, {
-                    size: 1,
-                    width: 1,
-                    height: 1,
-                    depth: 1
-                }, scene);
+                    const keyNum = parseInt(evt.key);
+                    if (!isNaN(keyNum) && keyNum > 0 && keyNum <= blockTypes.length) {
+                        selectedBlockType = blockTypes[keyNum - 1];
+                        updateHotbar();
+                        debugLog(`Valt block: ${selectedBlockType}`);
+                    }
+                });
                 
-                block.position = new BABYLON.Vector3(x, y, z);
-                block.checkCollisions = true;
-                block.material = blockMaterials[type];
-                return block;
-            };
-            
-            updateLoadingScreen("Generating terrain...", 50);
-            const groundSize = 32; // Reduced from 100 to 32
-            const SPAWN_HEIGHT = 10; // Konstant höjd för spawn-plattformen
-            const world = {};
-            
-            for (let x = 0; x < groundSize; x++) {
-                for (let z = 0; z < groundSize; z++) {
-                    const height = Math.floor(5 + Math.sin(x/10) * 3 + Math.cos(z/10) * 3);
+                // Funktion för att skapa ett block
+                function createBlock(x, y, z, type) {
+                    const key = `${x},${y},${z}`;
                     
-                    for (let y = 0; y < height; y++) {
-                        const blockType = y === height - 1 ? 'grass' : (y > height - 4 ? 'dirt' : 'stone');
-                        const block = createBlock(x, y, z, blockType);
-                        
-                        if (!world[x]) world[x] = {};
-                        if (!world[x][y]) world[x][y] = {};
-                        world[x][y][z] = { mesh: block, type: blockType };
+                    // Kontrollera om det redan finns ett block här
+                    if (blockMeshes[key]) {
+                        return null;
                     }
                     
-                    if (Math.random() < 0.01 && height > 5) { // Reduced tree frequency
-                        const treeHeight = 4;
-                        for (let y = height; y < height + treeHeight; y++) {
-                            const block = createBlock(x, y, z, 'wood');
-                            if (!world[x]) world[x] = {};
-                            if (!world[x][y]) world[x][y] = {};
-                            world[x][y][z] = { mesh: block, type: 'wood' };
+                    const box = BABYLON.MeshBuilder.CreateBox(
+                        `block_${key}`,
+                        { size: 1 },
+                        scene
+                    );
+                    box.position = new BABYLON.Vector3(x, y, z);
+                    box.checkCollisions = true;
+                    box.isPickable = true;
+                    
+                    // Skapa eller återanvänd material
+                    let materialKey = `material_${type}`;
+                    if (!blockMaterials[materialKey]) {
+                        const material = new BABYLON.StandardMaterial(materialKey, scene);
+                        material.diffuseColor = blockColors[type];
+                        material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                        
+                        if (type === blockTypes.FLOWER_RED || 
+                            type === blockTypes.FLOWER_YELLOW || 
+                            type === blockTypes.MUSHROOM) {
+                            material.alpha = 0.8;
                         }
                         
-                        const leafRadius = 2;
-                        for (let lx = x - leafRadius; lx <= x + leafRadius; lx++) {
-                            for (let ly = height + treeHeight - 1; ly <= height + treeHeight + 1; ly++) {
-                                for (let lz = z - leafRadius; lz <= z + leafRadius; lz++) {
-                                    if (Math.random() < 0.7 && lx >= 0 && lx < groundSize && lz >= 0 && lz < groundSize) {
-                                        if (!world[lx]) world[lx] = {};
-                                        if (!world[lx][ly]) world[lx][ly] = {};
-                                        if (!world[lx][ly][lz]) {
-                                            const block = createBlock(lx, ly, lz, 'leaves');
-                                            world[lx][ly][lz] = { mesh: block, type: 'leaves' };
-                                        }
-                                    }
+                        blockMaterials[materialKey] = material;
+                    }
+                    
+                    box.material = blockMaterials[materialKey];
+                    box.blockType = type;
+                    blockMeshes[key] = box;
+                    
+                    return box;
+                }
+                
+                // Hjälpfunktion för att skapa ett träd
+                function createTree(x, y, z) {
+                    const height = 4 + Math.floor(Math.random() * 3); // Trädhöjd 4-6 block
+                    
+                    // Skapa stam
+                    for (let i = 0; i < height; i++) {
+                        createBlock(x, y + i, z, blockTypes.TREE_TRUNK);
+                    }
+                    
+                    // Skapa lövverk (som en boll)
+                    for (let dx = -2; dx <= 2; dx++) {
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dz = -2; dz <= 2; dz++) {
+                                // Skapa sfärisk form
+                                if (dx*dx + dy*dy + dz*dz <= 8) {
+                                    createBlock(
+                                        x + dx,
+                                        y + height - 1 + dy,
+                                        z + dz,
+                                        blockTypes.TREE_LEAVES
+                                    );
                                 }
                             }
                         }
                     }
                 }
-            }
-            
-            // Efter att världen har genererats, skapa en säker spawn-plats
-            const spawnX = Math.floor(groundSize / 2);
-            const spawnZ = Math.floor(groundSize / 2);
-            
-            // Rensa några block runt spawn för att säkerställa att spelaren inte fastnar
-            for (let x = spawnX - 2; x <= spawnX + 2; x++) {
-                for (let z = spawnZ - 2; z <= spawnZ + 2; z++) {
-                    for (let y = 0; y < SPAWN_HEIGHT + 5; y++) {
-                        if (world[x]?.[y]?.[z]) {
-                            world[x][y][z].mesh.dispose();
-                            delete world[x][y][z];
+                
+                // Hjälpfunktion för att skapa en blomma
+                function createFlower(x, y, z) {
+                    const type = Math.random() < 0.5 ? blockTypes.FLOWER_RED : blockTypes.FLOWER_YELLOW;
+                    createBlock(x, y, z, type);
+                }
+                
+                // Hjälpfunktion för att skapa en svamp
+                function createMushroom(x, y, z) {
+                    createBlock(x, y, z, blockTypes.MUSHROOM);
+                }
+                
+                // Generera terräng för trollskogen
+                debugLog('Skapar trollskog...');
+                
+                // Använd Simplex noise för att generera naturlig terräng
+                function noise(x, z) {
+                    return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + 
+                           Math.sin(x * 0.05 + z * 0.05) * 3;
+                }
+                
+                // Skapa terräng med träd och växter
+                async function generateForest() {
+                    const size = 16; // Storlek på skogen
+                    
+                    // Först skapar vi terrängen
+                    for (let x = -size; x <= size; x++) {
+                        for (let z = -size; z <= size; z++) {
+                            // Beräkna höjd med noise
+                            const height = Math.floor(baseHeight + noise(x, z));
+                            
+                            // Skapa markblock
+                            for (let y = 0; y <= height; y++) {
+                                const blockType = y === height ? blockTypes.GRASS :
+                                                y > height - 3 ? blockTypes.DIRT :
+                                                blockTypes.STONE;
+                                createBlock(x, y, z, blockType);
+                            }
+                            
+                            // Lägg till moss på vissa block
+                            if (Math.random() < 0.1) {
+                                createBlock(x, height, z, blockTypes.MOSS);
+                            }
+                            
+                            // Placera träd med viss sannolikhet
+                            if (Math.random() < 0.05 && 
+                                Math.abs(x) > 2 && Math.abs(z) > 2) { // Inte för nära spawn
+                                createTree(x, height + 1, z);
+                            }
+                            
+                            // Placera blommor och svampar
+                            if (Math.random() < 0.1) {
+                                if (Math.random() < 0.7) {
+                                    createFlower(x, height + 1, z);
+                                } else {
+                                    createMushroom(x, height + 1, z);
+                                }
+                            }
+                            
+                            // Placera några trollstenar
+                            if (Math.random() < 0.02) {
+                                const stoneHeight = Math.floor(1 + Math.random() * 2);
+                                for (let h = 0; h < stoneHeight; h++) {
+                                    createBlock(x, height + 1 + h, z, blockTypes.TROLL_STONE);
+                                }
+                            }
+                            
+                            await new Promise(resolve => setTimeout(resolve, 10));
+                            scene.render();
                         }
+                        
+                        // Uppdatera laddningsprocent
+                        const progress = ((x + size) / (size * 2)) * 100;
+                        updateLoadingProgress(progress, `Skapar trollskog... ${Math.round(progress)}%`);
                     }
                 }
-            }
-            
-            // Skapa en plattform att starta på
-            for (let x = spawnX - 2; x <= spawnX + 2; x++) {
-                for (let z = spawnZ - 2; z <= spawnZ + 2; z++) {
-                    const block = createBlock(x, SPAWN_HEIGHT, z, 'stone');
-                    if (!world[x]) world[x] = {};
-                    if (!world[x][SPAWN_HEIGHT]) world[x][SPAWN_HEIGHT] = {};
-                    world[x][SPAWN_HEIGHT][z] = { mesh: block, type: 'stone' };
-                }
-            }
-            
-            // Sätt kameran till spawn-positionen
-            camera.position = new BABYLON.Vector3(spawnX, SPAWN_HEIGHT + 2, spawnZ);
-            
-            updateLoadingScreen("Setting up physics...", 70);
-            scene.gravity = new BABYLON.Vector3(0, -0.2, 0);
-            
-            updateLoadingScreen("Setting up lighting...", 80);
-            const light = new BABYLON.DirectionalLight("light", new BABYLON.Vector3(-1, -2, -1), scene);
-            light.intensity = 0.8;
-            light.diffuse = new BABYLON.Color3(1, 1, 1);
-            light.specular = new BABYLON.Color3(0.2, 0.2, 0.2);
-            
-            const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
-            ambientLight.intensity = 0.3;
-            
-            updateLoadingScreen("Setting up controls...", 90);
-            let currentBlockType = 'grass';
-            
-            document.querySelectorAll('.hotbar-slot').forEach(slot => {
-                slot.addEventListener('click', () => {
-                    document.querySelectorAll('.hotbar-slot').forEach(s => s.classList.remove('active'));
-                    slot.classList.add('active');
-                    currentBlockType = slot.dataset.block;
+                
+                // Generera skogen
+                await generateForest();
+                debugLog('Trollskog skapad!');
+                
+                // Starta renderingsloopen
+                engine.runRenderLoop(function() {
+                    scene.render();
                 });
-            });
-            
-            canvas.addEventListener('click', (e) => {
-                if (e.metaKey || e.button === 2) { // CMD+klick (Mac) eller högerklick
-                    const pickResult = scene.pick(scene.pointerX, scene.pointerY, mesh => mesh.name.startsWith('block_'));
-                    if (pickResult.hit && pickResult.pickedMesh) {
-                        const pos = pickResult.pickedMesh.position;
-                        const normal = pickResult.getNormal(true);
-                        
-                        const x = Math.round(pos.x + normal.x);
-                        const y = Math.round(pos.y + normal.y);
-                        const z = Math.round(pos.z + normal.z);
-                        
-                        if (!world[x]?.[y]?.[z]) {
-                            const block = createBlock(x, y, z, currentBlockType);
-                            if (!world[x]) world[x] = {};
-                            if (!world[x][y]) world[x][y] = {};
-                            world[x][y][z] = { mesh: block, type: currentBlockType };
-                        }
-                    }
-                } else {
-                    const pickResult = scene.pick(scene.pointerX, scene.pointerY, mesh => mesh.name.startsWith('block_'));
-                    if (pickResult.hit && pickResult.pickedMesh) {
-                        const pos = pickResult.pickedMesh.position;
-                        const x = Math.round(pos.x);
-                        const y = Math.round(pos.y);
-                        const z = Math.round(pos.z);
-                        
-                        if (world[x]?.[y]?.[z]) {
-                            world[x][y][z].mesh.dispose();
-                            delete world[x][y][z];
-                        }
-                    }
-                }
-            });
-            
-            canvas.addEventListener('contextmenu', e => e.preventDefault());
-            
-            updateLoadingScreen("Ready!", 100);
-            setTimeout(() => {
-                document.getElementById('loading-screen').style.display = 'none';
-            }, 500);
-            
-            engine.runRenderLoop(() => scene.render());
-            window.addEventListener('resize', () => engine.resize());
+                
+                // Dölj laddningsskärmen
+                hideLoadingScreen();
+                
+                window.addEventListener('resize', function() {
+                    engine.resize();
+                });
+                
+                // Uppdatera hotbar
+                function updateHotbar() {
+                    const hotbar = document.getElementById('hotbar');
+                    hotbar.innerHTML = '';
+                    
+                    const availableBlocks = [
+                        { type: blockTypes.DIRT, name: 'Jord' },
+                        { type: blockTypes.GRASS, name: 'Gräs' },
+                        { type: blockTypes.STONE, name: 'Sten' },
+                        { type: blockTypes.TREE_TRUNK, name: 'Trä' },
+                        { type: blockTypes.TREE_LEAVES, name: 'Löv' },
+                        { type: blockTypes.MOSS, name: 'Mossa' }
+                    ];
 
-            // Lägg till instruktioner i UI:n
-            const instructions = document.createElement('div');
-            instructions.style.position = 'absolute';
-            instructions.style.top = '10px';
-            instructions.style.left = '10px';
-            instructions.style.color = 'white';
-            instructions.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-            instructions.style.padding = '10px';
-            instructions.style.borderRadius = '5px';
-            instructions.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            instructions.innerHTML = `
-                Kontroller:<br>
-                - WASD eller piltangenter = Rörelse<br>
-                - Mellanslag = Hoppa<br>
-                - Shift = Krypa<br>
-                - Klick = Ta bort block<br>
-                - CMD + Klick = Placera block<br>
-                - + och - = Zooma in/ut<br>
-                - Välj block i hotbaren nedan
-            `;
-            document.getElementById('ui-container').appendChild(instructions);
+                    availableBlocks.forEach((block, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'hotbar-item';
+                        if (block.type === selectedBlockType) {
+                            item.className += ' selected';
+                        }
+                        
+                        const itemColor = blockColors[block.type];
+                        item.style.backgroundColor = `rgb(${itemColor.r * 255}, ${itemColor.g * 255}, ${itemColor.b * 255})`;
+                        item.title = `${block.name} (${index + 1})`;
+                        
+                        // Lägg till klickhändelse för att välja block
+                        item.addEventListener('click', function() {
+                            selectedBlockType = block.type;
+                            updateHotbar();
+                            debugLog(`Valt block: ${block.name}`);
+                        });
+                        
+                        hotbar.appendChild(item);
+                    });
+                }
+
+                // Uppdatera hotbar direkt
+                updateHotbar();
+                
+            } catch (error) {
+                debugLog('ERROR: ' + error.message);
+                console.error(error);
+            }
         });
     </script>
 </body>

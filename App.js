@@ -23,5 +23,4 @@ const styles = StyleSheet.create({
   },
 });
 
-// Exportera App som en global variabel för webbläsaren
-window.App = App; 
+export default App; 
