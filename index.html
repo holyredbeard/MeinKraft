@@ -252,6 +252,9 @@
                 const engine = new BABYLON.Engine(canvas, true);
                 const scene = new BABYLON.Scene(engine);
                 
+                // Lägg till pointer lock variabel
+                let isLocked = false;
+                
                 // Ljusblå sommarhimmel
                 scene.clearColor = new BABYLON.Color4(0.6, 0.8, 1.0, 1);
                 
@@ -275,32 +278,21 @@
                 
                 debugLog('Miljö skapad');
                 
-                // Skapa FPS-kamera
-                const camera = new BABYLON.UniversalCamera(
-                    "camera",
-                    new BABYLON.Vector3(SPAWN_X, baseHeight + 2, SPAWN_Z),
-                    scene
-                );
-                
-                // Grundläggande kamerainställningar
+                // Skapa kameran
+                const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(SPAWN_X, SPAWN_HEIGHT + 2, SPAWN_Z), scene);
+                camera.setTarget(new BABYLON.Vector3(SPAWN_X + 1, SPAWN_HEIGHT + 2, SPAWN_Z + 1));
                 camera.attachControl(canvas, true);
-                camera.speed = 0.5;
-                camera.fov = 1.5; // Max utzoom
+                camera.speed = 0.4;
+                camera.fov = 1.2;
+                camera.checkCollisions = true;
+                camera.applyGravity = true;
+                camera.ellipsoid = new BABYLON.Vector3(0.4, 1.8, 0.4);
+                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0);
                 camera.minZ = 0.1;
-                camera.inertia = 0.5;
-                camera.angularSensibility = 1000;
-                
-                // Inaktivera all fysik för kameran
-                camera.checkCollisions = false;
-                camera.applyGravity = false;
-                camera.ellipsoid = new BABYLON.Vector3(0.4, 0.8, 0.4);
-                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.8, 0);
+                camera.maxZ = 1000;
+                camera.inertia = 0.3;
+                camera.angularSensibility = 2000;
 
-                // Sätt kamerans position direkt efter att scenen har renderats första gången
-                scene.executeWhenReady(() => {
-                    camera.position.y = baseHeight + 2;
-                });
-                
                 // Sätt upp kontroller för WASD och piltangenter
                 const keysForward = [87, 38];  // W och pil upp
                 const keysBackward = [83, 40]; // S och pil ner
@@ -312,174 +304,157 @@
                 camera.keysLeft = keysLeft;
                 camera.keysRight = keysRight;
 
-                // Hantera zoom med +/- tangenter
+                // Sätt gravitationen för scenen
+                scene.gravity = new BABYLON.Vector3(0, -0.65, 0);
+                scene.collisionsEnabled = true;
+
+                // Hantera hopp
+                let canJump = true;
                 window.addEventListener('keydown', function(evt) {
-                    if (evt.key === '+' || evt.key === '=') {
-                        camera.fov = Math.max(0.5, camera.fov - 0.1);
-                    } else if (evt.key === '-' || evt.key === '_') {
-                        camera.fov = Math.min(1.5, camera.fov + 0.1);
+                    if (evt.code === 'Space' && canJump) {
+                        camera.cameraDirection.y += 0.7;
+                        canJump = false;
+                        setTimeout(() => { canJump = true; }, 750);
                     }
                 });
                 
-                // Hantera pointer lock
-                let isLocked = false;
+                // Skapa hotbar med block-typer
+                const hotbar = document.getElementById('hotbar');
+                let selectedBlockType = blockTypes.DIRT; // Standard block-typ
                 
-                // Klickhantering för att låsa/frigöra musen
-                canvas.addEventListener('click', function() {
+                // Lägg till block-typer i hotbar
+                const hotbarBlocks = [
+                    blockTypes.DIRT,
+                    blockTypes.GRASS,
+                    blockTypes.STONE,
+                    blockTypes.TREE_TRUNK,
+                    blockTypes.MOSS,
+                    blockTypes.TROLL_STONE
+                ];
+                
+                hotbarBlocks.forEach((type, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'hotbar-item';
+                    item.style.backgroundColor = `rgb(${blockColors[type].r * 255}, ${blockColors[type].g * 255}, ${blockColors[type].b * 255})`;
+                    if (type === selectedBlockType) {
+                        item.classList.add('selected');
+                    }
+                    item.addEventListener('click', () => {
+                        document.querySelectorAll('.hotbar-item').forEach(i => i.classList.remove('selected'));
+                        item.classList.add('selected');
+                        selectedBlockType = type;
+                    });
+                    hotbar.appendChild(item);
+                    
+                    // Lägg till nummer-tangent som genväg (1-6)
+                    window.addEventListener('keydown', (event) => {
+                        if (event.key === String(index + 1)) {
+                            document.querySelectorAll('.hotbar-item').forEach(i => i.classList.remove('selected'));
+                            item.classList.add('selected');
+                            selectedBlockType = type;
+                        }
+                    });
+                });
+                
+                // Hantera musklick för att bygga/ta bort block
+                scene.onPointerDown = function(evt) {
                     if (!isLocked) {
                         canvas.requestPointerLock = canvas.requestPointerLock || 
-                                                  canvas.mozRequestPointerLock;
-                        canvas.requestPointerLock();
+                                                  canvas.mozRequestPointerLock || 
+                                                  canvas.webkitRequestPointerLock;
+                        if (canvas.requestPointerLock) {
+                            canvas.requestPointerLock();
+                        }
+                        return;
                     }
+                    
+                    const pickResult = scene.pick(
+                        canvas.width / 2,  // Använd mitten av skärmen
+                        canvas.height / 2,
+                        null,
+                        false,
+                        camera
+                    );
+                    
+                    if (!pickResult.hit) return;
+                    
+                    const pickedMesh = pickResult.pickedMesh;
+                    if (!pickedMesh || !pickedMesh.blockType) return;
+                    
+                    if (evt.button === 0) { // Vänsterklick - ta bort block
+                        const position = pickedMesh.position;
+                        const key = `${Math.round(position.x)},${Math.round(position.y)},${Math.round(position.z)}`;
+                        if (blockMeshes[key]) {
+                            blockMeshes[key].dispose();
+                            delete blockMeshes[key];
+                        }
+                    } else if (evt.button === 2) { // Högerklick - placera block
+                        const point = pickResult.pickedPoint;
+                        const normal = pickResult.getNormal();
+                        const position = new BABYLON.Vector3(
+                            Math.round(point.x + normal.x * 0.5),
+                            Math.round(point.y + normal.y * 0.5),
+                            Math.round(point.z + normal.z * 0.5)
+                        );
+                        
+                        // Kontrollera att vi inte placerar block där spelaren står
+                        const playerPos = camera.position;
+                        const playerBlockPos = new BABYLON.Vector3(
+                            Math.round(playerPos.x),
+                            Math.round(playerPos.y),
+                            Math.round(playerPos.z)
+                        );
+                        
+                        if (!position.equals(playerBlockPos) && 
+                            !position.equals(new BABYLON.Vector3(playerBlockPos.x, playerBlockPos.y - 1, playerBlockPos.z))) {
+                            createBlock(position.x, position.y, position.z, selectedBlockType);
+                        }
+                    }
+                };
+                
+                // Förhindra standardhögerklick-menyn
+                canvas.addEventListener('contextmenu', function(evt) {
+                    evt.preventDefault();
                 });
                 
                 // Lyssna på pointer lock ändringar
                 document.addEventListener("pointerlockchange", lockChangeAlert, false);
                 document.addEventListener("mozpointerlockchange", lockChangeAlert, false);
+                document.addEventListener("webkitpointerlockchange", lockChangeAlert, false);
                 
                 function lockChangeAlert() {
                     isLocked = document.pointerLockElement === canvas ||
-                              document.mozPointerLockElement === canvas;
+                              document.mozPointerLockElement === canvas ||
+                              document.webkitPointerLockElement === canvas;
                     
                     if (isLocked) {
                         debugLog("Muspekare låst");
+                        camera.attachControl(canvas, true);
                     } else {
                         debugLog("Muspekare frigjord");
+                        // Återställ alla rörelseflaggor när pointer lock släpps
+                        moveForward = moveBackward = moveLeft = moveRight = false;
+                        camera.detachControl(canvas);
                     }
                 }
                 
-                // Hantera block-interaktioner
-                let selectedBlockType = blockTypes.DIRT;
-                
-                // Hantera hopp med mellanslag
-                let canJump = true;
-                let jumpVelocity = 0;
-                const JUMP_FORCE = 1.0; // Ökad hopphöjd
-                const GRAVITY = 0.05; // Ökad gravitation
-                
-                window.addEventListener('keydown', function(evt) {
-                    if (evt.code === 'Space' && canJump) {
-                        jumpVelocity = JUMP_FORCE;
-                        canJump = false;
-                        setTimeout(() => { canJump = true; }, 500); // Kortare cooldown
-                    }
-                });
-
-                // Uppdatera hopp och gravitation i renderingsloopen
-                scene.registerBeforeRender(function() {
-                    if (jumpVelocity !== 0) {
-                        camera.position.y += jumpVelocity;
-                        jumpVelocity -= GRAVITY;
-                        
-                        // Kontrollera om vi har landat
-                        const pickInfo = scene.pickWithRay(new BABYLON.Ray(
-                            camera.position,
-                            new BABYLON.Vector3(0, -1, 0),
-                            2 // Kontrollera 2 enheter nedåt
-                        ));
-                        
-                        if (pickInfo.hit && jumpVelocity < 0) {
-                            camera.position.y = pickInfo.pickedPoint.y + 2;
-                            jumpVelocity = 0;
-                            canJump = true;
+                // Hantera ESC-tangenten för att frigöra muspekaren
+                window.addEventListener("keydown", function(evt) {
+                    if (evt.keyCode === 27) { // ESC
+                        if (isLocked) {
+                            document.exitPointerLock = document.exitPointerLock ||
+                                                     document.mozExitPointerLock ||
+                                                     document.webkitExitPointerLock;
+                            if (document.exitPointerLock) {
+                                document.exitPointerLock();
+                            }
                         }
-                    }
-                });
-                
-                // Funktion för att placera block
-                function placeBlock(pickInfo) {
-                    if (pickInfo.hit) {
-                        const pickedPoint = pickInfo.pickedPoint;
-                        const normal = pickInfo.getNormal();
-                        
-                        // Beräkna position för det nya blocket
-                        const position = new BABYLON.Vector3(
-                            Math.floor(pickedPoint.x),
-                            Math.floor(pickedPoint.y),
-                            Math.floor(pickedPoint.z)
-                        );
-                        
-                        // Lägg till blocket på den sida som klickades
-                        position.x += Math.round(normal.x);
-                        position.y += Math.round(normal.y);
-                        position.z += Math.round(normal.z);
-                        
-                        // Kontrollera om positionen är giltig
-                        const key = `${position.x},${position.y},${position.z}`;
-                        if (!blockMeshes[key]) {
-                            createBlock(position.x, position.y, position.z, selectedBlockType);
-                            debugLog(`Block placerat vid ${key}`);
-                        }
-                    }
-                }
-                
-                // Funktion för att ta bort block
-                function removeBlock(pickInfo) {
-                    if (pickInfo.hit && pickInfo.pickedMesh && pickInfo.pickedMesh.blockType) {
-                        const position = pickInfo.pickedMesh.position;
-                        const key = `${Math.floor(position.x)},${Math.floor(position.y)},${Math.floor(position.z)}`;
-                        if (blockMeshes[key]) {
-                            blockMeshes[key].dispose();
-                            delete blockMeshes[key];
-                            debugLog(`Block borttaget vid ${key}`);
-                        }
-                    }
-                }
-                
-                // Hantera musklick för blockinteraktion
-                scene.onPointerDown = function(evt) {
-                    if (!isLocked) {
-                        canvas.requestPointerLock();
-                        return;
-                    }
-                    
-                    const pickInfo = scene.pick(scene.pointerX, scene.pointerY);
-                    
-                    if (evt.button === 0) { // Vänsterklick - ta bort block
-                        removeBlock(pickInfo);
-                    }
-                };
-                
-                // Hantera CMD+click för blockplacering
-                canvas.addEventListener('click', function(evt) {
-                    if (evt.metaKey && isLocked) {
-                        const pickInfo = scene.pick(scene.pointerX, scene.pointerY);
-                        placeBlock(pickInfo);
-                    }
-                });
-                
-                // Förhindra högerklicksmenyn
-                canvas.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                });
-                
-                // Hantera blockval med siffertangenter
-                window.addEventListener('keydown', function(evt) {
-                    const blockTypes = [
-                        blockTypes.DIRT,
-                        blockTypes.GRASS,
-                        blockTypes.STONE,
-                        blockTypes.TREE_TRUNK,
-                        blockTypes.TREE_LEAVES,
-                        blockTypes.MOSS
-                    ];
-                    
-                    const keyNum = parseInt(evt.key);
-                    if (!isNaN(keyNum) && keyNum > 0 && keyNum <= blockTypes.length) {
-                        selectedBlockType = blockTypes[keyNum - 1];
-                        updateHotbar();
-                        debugLog(`Valt block: ${selectedBlockType}`);
                     }
                 });
                 
                 // Funktion för att skapa ett block
                 function createBlock(x, y, z, type) {
                     const key = `${x},${y},${z}`;
-                    
-                    // Kontrollera om det redan finns ett block här
-                    if (blockMeshes[key]) {
-                        return null;
-                    }
                     
                     const box = BABYLON.MeshBuilder.CreateBox(
                         `block_${key}`,
@@ -497,6 +472,7 @@
                         material.diffuseColor = blockColors[type];
                         material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
                         
+                        // Gör blommor och svampar delvis genomskinliga
                         if (type === blockTypes.FLOWER_RED || 
                             type === blockTypes.FLOWER_YELLOW || 
                             type === blockTypes.MUSHROOM) {
@@ -509,6 +485,11 @@
                     box.material = blockMaterials[materialKey];
                     box.blockType = type;
                     blockMeshes[key] = box;
+                    blockCount++;
+                    
+                    if (blockCount % 100 === 0) {
+                        debugLog(`Skapat ${blockCount} block`);
+                    }
                     
                     return box;
                 }
@@ -631,45 +612,6 @@
                 window.addEventListener('resize', function() {
                     engine.resize();
                 });
-                
-                // Uppdatera hotbar
-                function updateHotbar() {
-                    const hotbar = document.getElementById('hotbar');
-                    hotbar.innerHTML = '';
-                    
-                    const availableBlocks = [
-                        { type: blockTypes.DIRT, name: 'Jord' },
-                        { type: blockTypes.GRASS, name: 'Gräs' },
-                        { type: blockTypes.STONE, name: 'Sten' },
-                        { type: blockTypes.TREE_TRUNK, name: 'Trä' },
-                        { type: blockTypes.TREE_LEAVES, name: 'Löv' },
-                        { type: blockTypes.MOSS, name: 'Mossa' }
-                    ];
-
-                    availableBlocks.forEach((block, index) => {
-                        const item = document.createElement('div');
-                        item.className = 'hotbar-item';
-                        if (block.type === selectedBlockType) {
-                            item.className += ' selected';
-                        }
-                        
-                        const itemColor = blockColors[block.type];
-                        item.style.backgroundColor = `rgb(${itemColor.r * 255}, ${itemColor.g * 255}, ${itemColor.b * 255})`;
-                        item.title = `${block.name} (${index + 1})`;
-                        
-                        // Lägg till klickhändelse för att välja block
-                        item.addEventListener('click', function() {
-                            selectedBlockType = block.type;
-                            updateHotbar();
-                            debugLog(`Valt block: ${block.name}`);
-                        });
-                        
-                        hotbar.appendChild(item);
-                    });
-                }
-
-                // Uppdatera hotbar direkt
-                updateHotbar();
                 
             } catch (error) {
                 debugLog('ERROR: ' + error.message);
