@@ -158,16 +158,16 @@
         
         // Blockfärger för sommarskog
         const blockColors = {
-            [blockTypes.GRASS]: new BABYLON.Color3(0.4, 0.7, 0.3),      // Ljust grönt gräs
-            [blockTypes.DIRT]: new BABYLON.Color3(0.4, 0.3, 0.2),       // Mörk jord
-            [blockTypes.STONE]: new BABYLON.Color3(0.6, 0.6, 0.6),      // Grå sten
-            [blockTypes.TREE_TRUNK]: new BABYLON.Color3(0.3, 0.2, 0.1), // Mörkt trä
-            [blockTypes.TREE_LEAVES]: new BABYLON.Color3(0.3, 0.5, 0.2), // Mörkgröna löv
+            [blockTypes.GRASS]: new BABYLON.Color3(0.35, 0.6, 0.25),     // Mörkare, mer naturligt gräs
+            [blockTypes.DIRT]: new BABYLON.Color3(0.35, 0.25, 0.15),     // Mörkare jord
+            [blockTypes.STONE]: new BABYLON.Color3(0.6, 0.6, 0.6),       // Grå sten
+            [blockTypes.TREE_TRUNK]: new BABYLON.Color3(0.6, 0.4, 0.2),  // Träfärg
+            [blockTypes.TREE_LEAVES]: new BABYLON.Color3(0.3, 0.5, 0.2), // Löv
             [blockTypes.FLOWER_RED]: new BABYLON.Color3(0.8, 0.2, 0.2),  // Röda blommor
             [blockTypes.FLOWER_YELLOW]: new BABYLON.Color3(0.9, 0.8, 0.2), // Gula blommor
             [blockTypes.MUSHROOM]: new BABYLON.Color3(0.8, 0.4, 0.4),    // Rosa svamp
-            [blockTypes.TROLL_STONE]: new BABYLON.Color3(0.5, 0.5, 0.55), // Trollsten (lite blåaktig)
-            [blockTypes.MOSS]: new BABYLON.Color3(0.3, 0.4, 0.2)         // Mörk mossa
+            [blockTypes.TROLL_STONE]: new BABYLON.Color3(0.5, 0.5, 0.55), // Trollsten
+            [blockTypes.MOSS]: new BABYLON.Color3(0.3, 0.45, 0.2)        // Mörkare mossa
         };
         
         let blockCount = 0;
@@ -279,19 +279,20 @@
                 debugLog('Miljö skapad');
                 
                 // Skapa kameran
-                const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(SPAWN_X, SPAWN_HEIGHT + 2, SPAWN_Z), scene);
+                const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(SPAWN_X, baseHeight + 2, SPAWN_Z), scene);
                 camera.setTarget(new BABYLON.Vector3(SPAWN_X + 1, SPAWN_HEIGHT + 2, SPAWN_Z + 1));
                 camera.attachControl(canvas, true);
                 camera.speed = 0.4;
                 camera.fov = 1.2;
                 camera.checkCollisions = true;
                 camera.applyGravity = true;
-                camera.ellipsoid = new BABYLON.Vector3(0.4, 1.8, 0.4);
-                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0);
-                camera.minZ = 0.1;
+                camera.ellipsoid = new BABYLON.Vector3(0.4, 1.8, 0.4);  // Normal spelarhöjd (1.8 block)
+                camera.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0); // Centrera kollisionsboxen
+                camera.minZ = 0.05;
                 camera.maxZ = 1000;
-                camera.inertia = 0.3;
-                camera.angularSensibility = 2000;
+                camera.inertia = 0.5;
+                camera.angularSensibility = 1000;
+                camera.stepHeight = 1.1;  // Gör det möjligt att gå över 1-block höga hinder
 
                 // Sätt upp kontroller för WASD och piltangenter
                 const keysForward = [87, 38];  // W och pil upp
@@ -310,18 +311,46 @@
 
                 // Hantera hopp
                 let canJump = true;
+                let jumpVelocity = 0;
                 window.addEventListener('keydown', function(evt) {
                     if (evt.code === 'Space' && canJump) {
-                        camera.cameraDirection.y += 0.7;
+                        jumpVelocity = 1.0;  // Sätt hopphastighet
                         canJump = false;
-                        setTimeout(() => { canJump = true; }, 750);
+                        setTimeout(() => { canJump = true; }, 500);
+                    }
+                });
+
+                // Uppdatera hopp och gravitation varje frame
+                scene.registerBeforeRender(function() {
+                    if (jumpVelocity > 0) {
+                        camera.position.y += jumpVelocity;
+                        jumpVelocity -= 0.05;  // Minska hopphastigheten gradvis
                     }
                 });
                 
                 // Skapa hotbar med block-typer
                 const hotbar = document.getElementById('hotbar');
                 let selectedBlockType = blockTypes.DIRT; // Standard block-typ
-                
+                const crosshair = document.getElementById('crosshair');
+                let isCmdPressed = false;
+
+                // Lyssna på CMD-tangenten
+                window.addEventListener('keydown', function(evt) {
+                    if (evt.metaKey) {  // metaKey är CMD på Mac
+                        isCmdPressed = true;
+                        // Ändra crosshair-färgen till den valda blocktypen
+                        const color = blockColors[selectedBlockType];
+                        crosshair.style.color = `rgb(${color.r * 255}, ${color.g * 255}, ${color.b * 255})`;
+                    }
+                });
+
+                window.addEventListener('keyup', function(evt) {
+                    if (evt.key === 'Meta') {  // Meta är CMD på Mac
+                        isCmdPressed = false;
+                        crosshair.style.color = 'white';  // Återställ till vit
+                    }
+                });
+
                 // Lägg till block-typer i hotbar
                 const hotbarBlocks = [
                     blockTypes.DIRT,
@@ -356,7 +385,7 @@
                     });
                 });
                 
-                // Hantera musklick för att bygga/ta bort block
+                // Uppdatera musklickhanteringen
                 scene.onPointerDown = function(evt) {
                     if (!isLocked) {
                         canvas.requestPointerLock = canvas.requestPointerLock || 
@@ -369,45 +398,62 @@
                     }
                     
                     const pickResult = scene.pick(
-                        canvas.width / 2,  // Använd mitten av skärmen
+                        canvas.width / 2,
                         canvas.height / 2,
-                        null,
+                        (mesh) => mesh.checkCollisions,
                         false,
                         camera
                     );
                     
-                    if (!pickResult.hit) return;
-                    
-                    const pickedMesh = pickResult.pickedMesh;
-                    if (!pickedMesh || !pickedMesh.blockType) return;
-                    
-                    if (evt.button === 0) { // Vänsterklick - ta bort block
-                        const position = pickedMesh.position;
-                        const key = `${Math.round(position.x)},${Math.round(position.y)},${Math.round(position.z)}`;
-                        if (blockMeshes[key]) {
-                            blockMeshes[key].dispose();
-                            delete blockMeshes[key];
-                        }
-                    } else if (evt.button === 2) { // Högerklick - placera block
-                        const point = pickResult.pickedPoint;
-                        const normal = pickResult.getNormal();
-                        const position = new BABYLON.Vector3(
-                            Math.round(point.x + normal.x * 0.5),
-                            Math.round(point.y + normal.y * 0.5),
-                            Math.round(point.z + normal.z * 0.5)
-                        );
-                        
-                        // Kontrollera att vi inte placerar block där spelaren står
-                        const playerPos = camera.position;
-                        const playerBlockPos = new BABYLON.Vector3(
-                            Math.round(playerPos.x),
-                            Math.round(playerPos.y),
-                            Math.round(playerPos.z)
-                        );
-                        
-                        if (!position.equals(playerBlockPos) && 
-                            !position.equals(new BABYLON.Vector3(playerBlockPos.x, playerBlockPos.y - 1, playerBlockPos.z))) {
-                            createBlock(position.x, position.y, position.z, selectedBlockType);
+                    if (evt.button === 0) { // Vänsterklick
+                        if (!isCmdPressed) {  // Ta bara bort block om CMD inte är intryckt
+                            if (pickResult.hit && pickResult.pickedMesh && pickResult.pickedMesh.blockType) {
+                                const position = pickResult.pickedMesh.position;
+                                const key = `${Math.floor(position.x)},${Math.floor(position.y)},${Math.floor(position.z)}`;
+                                if (blockMeshes[key]) {
+                                    blockMeshes[key].dispose();
+                                    delete blockMeshes[key];
+                                    debugLog(`Block borttaget på ${key}`);
+                                }
+                            }
+                        } else if (pickResult.hit) {  // Placera block om CMD är intryckt
+                            const point = pickResult.pickedPoint;
+                            const normal = pickResult.getNormal();
+                            
+                            // Beräkna den nya blockpositionen med bättre precision
+                            const epsilon = 0.001;  // Liten offset för att undvika z-fighting
+                            const newX = Math.round(point.x + normal.x * (0.5 + epsilon));
+                            const newY = Math.round(point.y + normal.y * (0.5 + epsilon));
+                            const newZ = Math.round(point.z + normal.z * (0.5 + epsilon));
+                            
+                            // Kontrollera avståndet till spelaren
+                            const playerPos = camera.position;
+                            const distanceToPlayer = BABYLON.Vector3.Distance(
+                                new BABYLON.Vector3(newX, newY, newZ),
+                                playerPos
+                            );
+                            
+                            // Kontrollera att blocket inte är för nära eller för långt bort
+                            if (distanceToPlayer > 1.5 && distanceToPlayer < 5) {
+                                const playerBlockPos = {
+                                    x: Math.round(playerPos.x),
+                                    y: Math.round(playerPos.y),
+                                    z: Math.round(playerPos.z)
+                                };
+                                
+                                const playerHeadPos = {
+                                    x: Math.round(playerPos.x),
+                                    y: Math.round(playerPos.y + 1),
+                                    z: Math.round(playerPos.z)
+                                };
+                                
+                                // Kontrollera att vi inte placerar block där spelaren står
+                                if (!(newX === playerBlockPos.x && newY === playerBlockPos.y && newZ === playerBlockPos.z) &&
+                                    !(newX === playerHeadPos.x && newY === playerHeadPos.y && newZ === playerHeadPos.z)) {
+                                    createBlock(newX, newY, newZ, selectedBlockType);
+                                    debugLog(`Block placerat på ${newX},${newY},${newZ}`);
+                                }
+                            }
                         }
                     }
                 };
@@ -472,6 +518,29 @@
                         material.diffuseColor = blockColors[type];
                         material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
                         
+                        // Lägg till textur för trädens löv
+                        if (type === blockTypes.TREE_LEAVES) {
+                            const leavesTexture = new BABYLON.Texture("src/textures/tree.png", scene);
+                            material.diffuseTexture = leavesTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0, 0, 0);  // Ingen glans
+                            material.ambientColor = new BABYLON.Color3(0.4, 0.6, 0.3);  // Ljusare grundfärg
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.15, 0.05);  // Svag självlysande effekt för kontrast
+                            material.useLogarithmicDepth = true;  // Bättre djuprendering
+                        }
+                        
+                        // Lägg till barktextur för trädstammar
+                        if (type === blockTypes.TREE_TRUNK) {
+                            const barkTexture = new BABYLON.Texture("src/textures/tree2.png", scene);
+                            material.diffuseTexture = barkTexture;
+                            material.diffuseTexture.hasAlpha = false;
+                            material.backFaceCulling = false;
+                            material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);  // Mindre glans
+                            material.ambientColor = new BABYLON.Color3(0.6, 0.4, 0.2);   // Ljusare grundfärg
+                            material.emissiveColor = new BABYLON.Color3(0.1, 0.05, 0);   // Svag varm glöd
+                        }
+                        
                         // Gör blommor och svampar delvis genomskinliga
                         if (type === blockTypes.FLOWER_RED || 
                             type === blockTypes.FLOWER_YELLOW || 
@@ -498,27 +567,63 @@
                 function createTree(x, y, z) {
                     const height = 4 + Math.floor(Math.random() * 3); // Trädhöjd 4-6 block
                     
+                    // Kontrollera om platsen är ledig för ett träd
+                    for (let i = 0; i < height; i++) {
+                        const key = `${x},${y + i},${z}`;
+                        if (blockMeshes[key]) {
+                            return false; // Platsen är upptagen
+                        }
+                    }
+                    
                     // Skapa stam
                     for (let i = 0; i < height; i++) {
                         createBlock(x, y + i, z, blockTypes.TREE_TRUNK);
                     }
                     
-                    // Skapa lövverk (som en boll)
-                    for (let dx = -2; dx <= 2; dx++) {
-                        for (let dy = -2; dy <= 2; dy++) {
-                            for (let dz = -2; dz <= 2; dz++) {
-                                // Skapa sfärisk form
-                                if (dx*dx + dy*dy + dz*dz <= 8) {
-                                    createBlock(
-                                        x + dx,
-                                        y + height - 1 + dy,
-                                        z + dz,
-                                        blockTypes.TREE_LEAVES
-                                    );
+                    // Skapa lövverk (som en naturlig krona)
+                    const leafStart = height - 3;  // Börja lövverket 3 block från toppen
+                    
+                    // Skapa en mer naturlig trädkrona
+                    for (let dy = 0; dy < 4; dy++) {  // 4 nivåer av löv
+                        const radius = dy === 1 || dy === 2 ? 2 : 1;  // Större radie i mitten
+                        
+                        for (let dx = -radius; dx <= radius; dx++) {
+                            for (let dz = -radius; dz <= radius; dz++) {
+                                // Skapa en mer naturlig, rundad form
+                                if (dx*dx + dz*dz <= radius*radius + 0.5) {
+                                    const leafX = x + dx;
+                                    const leafY = y + leafStart + dy;
+                                    const leafZ = z + dz;
+                                    
+                                    // Lägg till lite slumpmässighet för att göra det mer naturligt
+                                    if (Math.random() > 0.1) {  // 90% chans att placera ett löv
+                                        const leafKey = `${leafX},${leafY},${leafZ}`;
+                                        if (!blockMeshes[leafKey]) {
+                                            createBlock(leafX, leafY, leafZ, blockTypes.TREE_LEAVES);
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                    
+                    // Lägg till några extra löv för att göra kronan mer oregelbunden
+                    for (let i = 0; i < 5; i++) {
+                        const dx = Math.floor(Math.random() * 5) - 2;
+                        const dy = Math.floor(Math.random() * 2);
+                        const dz = Math.floor(Math.random() * 5) - 2;
+                        
+                        const leafX = x + dx;
+                        const leafY = y + leafStart + dy;
+                        const leafZ = z + dz;
+                        
+                        const leafKey = `${leafX},${leafY},${leafZ}`;
+                        if (!blockMeshes[leafKey]) {
+                            createBlock(leafX, leafY, leafZ, blockTypes.TREE_LEAVES);
+                        }
+                    }
+                    
+                    return true;
                 }
                 
                 // Hjälpfunktion för att skapa en blomma
@@ -559,19 +664,32 @@
                                 createBlock(x, y, z, blockType);
                             }
                             
-                            // Lägg till moss på vissa block
-                            if (Math.random() < 0.1) {
+                            // Lägg till moss på vissa block (minskat sannolikheten)
+                            if (Math.random() < 0.05) {  // Ändrat från 0.1 till 0.05
                                 createBlock(x, height, z, blockTypes.MOSS);
                             }
                             
                             // Placera träd med viss sannolikhet
                             if (Math.random() < 0.05 && 
-                                Math.abs(x) > 2 && Math.abs(z) > 2) { // Inte för nära spawn
-                                createTree(x, height + 1, z);
+                                Math.abs(x) > 3 && Math.abs(z) > 3) {
+                                // Kontrollera närliggande block för att undvika träd för nära varandra
+                                let canPlaceTree = true;
+                                for (let dx = -2; dx <= 2; dx++) {
+                                    for (let dz = -2; dz <= 2; dz++) {
+                                        const nearbyKey = `${x + dx},${height + 1},${z + dz}`;
+                                        if (blockMeshes[nearbyKey]) {
+                                            canPlaceTree = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (canPlaceTree) {
+                                    createTree(x, height + 1, z);
+                                }
                             }
                             
-                            // Placera blommor och svampar
-                            if (Math.random() < 0.1) {
+                            // Placera blommor och svampar mer sällan
+                            if (Math.random() < 0.03) {  // Ändrat från 0.1 till 0.03
                                 if (Math.random() < 0.7) {
                                     createFlower(x, height + 1, z);
                                 } else {
